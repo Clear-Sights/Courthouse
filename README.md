@@ -33,12 +33,37 @@ $ claude plugin install makoto@tribunal
 
 Install any subset — the three verdicts are independent.
 
+## The shared trust boundary
+
+All three engines run inside the boundary of the very process they constrain: each is a hook fed
+by the agent's own event stream, and intent is unobservable from outside that boundary, so they
+judge only what crosses it — acts, sequences, and statements. A policy whose behavior stays inside
+the check surface passes, whoever or whatever drives it. They constrain capability, not intent.
+
+Why three engines and not four: act/sequence/statement is a partition of what an external judge
+can observe, not a growing feature list. From outside the process there is nothing else to rule
+on — a single pending event is an act, an ordering of events is a sequence, and text emitted about
+them is a statement — so a candidate fourth engine would either judge one of those three surfaces
+(and belong to an existing bench seat) or claim to judge intent, which no observer at this
+boundary can see. Three judges exhaust the observable.
+
 ## Evidence
 
 Each engine ships a corpus-replay eval you can run from its repository root
 with nothing but the standard library — `python3 eval/replay.py` — replaying
 recorded sessions through the real dispatcher: Ward 6/6, Gyroscope 5/5,
-Makoto 5/5. Exit 0 iff every session meets its expectation.
+Makoto 5/5. Exit 0 iff every session meets its expectation. Those counts are replays of authored
+fixtures through the real dispatchers — they prove each dispatcher fires where its fixtures say it
+should, not that a live session behaves differently for having the hook installed; live-session
+effect on agent behavior is unmeasured (Gyroscope's own SKILL.md says the same: "Built and
+mechanism-verified is not live-model measured").
+
+## Plugin descriptions
+
+The plugin descriptions in [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) are
+copies of each engine's current self-description. On any disagreement between this storefront and
+an engine's own README, the engine's README wins — the storefront is synced from the merchandise,
+never the reverse.
 
 ## License
 
