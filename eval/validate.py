@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Tribunal marketplace manifest.
+"""Validate the Courthouse marketplace manifest.
 
 Checks, stdlib + git only:
   1. marketplace.json parses and carries the required top-level fields.
@@ -23,7 +23,7 @@ def check(ok, msg):
         failures.append(msg)
 
 m = json.loads(MANIFEST.read_text())
-check(m.get("name") == "tribunal", "marketplace name is 'tribunal'")
+check(m.get("name") == "courthouse", "marketplace name is 'courthouse'")
 check(isinstance(m.get("owner"), dict) and m["owner"].get("url"), "owner present")
 plugins = m.get("plugins", [])
 check(len(plugins) == 3, f"exactly three plugins listed (got {len(plugins)})")
