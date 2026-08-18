@@ -22,6 +22,14 @@ statement** — and share nothing else: each installs alone, each is a pure
   its own logged record — "tests pass", "I pushed it", "it's running" — and a
   claim with no matching evidence blocks instead of warns.
 
+## Start from the failure you know
+
+| Failure | Engine |
+|---|---|
+| Claude turned a red test green by disabling TLS verification. | **Ward** denies the act before it executes. |
+| Claude pushed over work it never fetched. | **Gyroscope** denies the push until the fetch is on record. |
+| Claude said the tests pass; they had never been run. | **Makoto** blocks the claim against the session's own record. |
+
 ## Install
 
 ```console
