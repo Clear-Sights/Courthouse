@@ -1,36 +1,72 @@
 {
   "name": "tribunal",
-  "owner": {"name": "Clear-Sights", "url": "https://github.com/Clear-Sights"},
+  "owner": {
+    "name": "Clear-Sights",
+    "url": "https://github.com/Clear-Sights"
+  },
   "metadata": {
     "description": "One bench, three judges: Ward rules on the act, Gyroscope on the sequence, Makoto on the statement."
   },
   "plugins": [
     {
       "name": "ward",
-      "source": {"source": "github", "repo": "Clear-Sights/Ward"},
+      "source": {
+        "source": "github",
+        "repo": "Clear-Sights/Ward",
+        "ref": "v1.0.0",
+        "sha": "248884fd270aafd9d3bee61f9990e508230c8f61"
+      },
       "description": "Judges the pending act: 11 exact, no-substitute PreToolUse hard denies for actions dangerous regardless of intent or honesty.",
       "category": "workflow",
-      "tags": ["security", "hooks", "safety"],
+      "tags": [
+        "security",
+        "hooks",
+        "safety"
+      ],
       "license": "Apache-2.0",
-      "homepage": "https://github.com/Clear-Sights/Ward"
+      "homepage": "https://github.com/Clear-Sights/Ward",
+      "version": "1.0.0"
     },
     {
       "name": "gyroscope",
-      "source": {"source": "git-subdir", "url": "https://github.com/Clear-Sights/Gyroscope.git", "path": "plugin"},
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/Clear-Sights/Gyroscope.git",
+        "path": "plugin",
+        "ref": "v1.0.0",
+        "sha": "f40a989862018139a0148acea48187d6a88d2645"
+      },
       "description": "Judges the sequence: denies a costly call until the cheap call that licenses it is on record. One obligation ledger reconciled at Stop; exact predicates over event plus ledger, never over prose.",
       "category": "workflow",
-      "tags": ["security", "hooks", "guardrails", "gyroscope"],
+      "tags": [
+        "security",
+        "hooks",
+        "guardrails",
+        "gyroscope"
+      ],
       "license": "Apache-2.0",
-      "homepage": "https://github.com/Clear-Sights/Gyroscope"
+      "homepage": "https://github.com/Clear-Sights/Gyroscope",
+      "version": "0.1.0"
     },
     {
       "name": "makoto",
-      "source": {"source": "github", "repo": "Clear-Sights/Makoto"},
+      "source": {
+        "source": "github",
+        "repo": "Clear-Sights/Makoto",
+        "ref": "v2.3.0",
+        "sha": "8fdcb9b22e9aad2c71a1e0f66ec0f1007c331924"
+      },
       "description": "Judges the statement: holds Claude Code to its word — every claim checked against the agent's own logged record; faked checks blocked, not warned. Two-tier catalog (15 pre-checks, 19 Stop gates), each shipped at measured zero false positives.",
       "category": "workflow",
-      "tags": ["integrity", "guardrails", "hooks", "claims"],
+      "tags": [
+        "integrity",
+        "guardrails",
+        "hooks",
+        "claims"
+      ],
       "license": "Apache-2.0",
-      "homepage": "https://github.com/Clear-Sights/Makoto"
+      "homepage": "https://github.com/Clear-Sights/Makoto",
+      "version": "2.3.0"
     }
   ]
 }
