@@ -1,6 +1,6 @@
-# Tribunal
+# Courthouse
 
-**One bench, three judges.** Tribunal is the plugin marketplace for the three
+**One bench, three judges.** Courthouse is the plugin marketplace for the three
 Clear-Sights guard engines. They split one taxonomy — **act, sequence,
 statement** — and share nothing else: each installs alone, each is a pure
 `stdlib` Python hook, and none inherits or implies the others' coverage.
@@ -25,10 +25,10 @@ statement** — and share nothing else: each installs alone, each is a pure
 ## Install
 
 ```console
-$ claude plugin marketplace add Clear-Sights/Tribunal
-$ claude plugin install ward@tribunal
-$ claude plugin install gyroscope@tribunal
-$ claude plugin install makoto@tribunal
+$ claude plugin marketplace add Clear-Sights/Courthouse
+$ claude plugin install ward@courthouse
+$ claude plugin install gyroscope@courthouse
+$ claude plugin install makoto@courthouse
 ```
 
 Install any subset — the three verdicts are independent.
