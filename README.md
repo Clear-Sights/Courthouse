@@ -55,6 +55,24 @@ them is a statement — so a candidate fourth engine would either judge one of t
 (and belong to an existing bench seat) or claim to judge intent, which no observer at this
 boundary can see. Three judges exhaust the observable.
 
+## When a judge's own machinery breaks
+
+Three plugins share one hook edge, so "what happens when a check cannot run?" is a bench-wide
+question, not three private ones — and it was answered three different ways until one input made
+all three answer at once. A single non-UTF-8 byte in a hook payload got Makoto to allow the call
+unchecked, Ward to deny a benign file citing a parse failure that was not real, and Gyroscope to
+abstain in silence.
+
+The settled policy is **[docs/FAIL-DIRECTION.md](docs/FAIL-DIRECTION.md)**, and its rule is that
+fail direction follows *recoverability*, not plugin taste: Ward rules on the act, which cannot be
+un-done at the next event, so it fails closed on everything; Makoto and Gyroscope rule on things
+still judgeable later, so they fail open on carriage and closed on decision. No fail-open is
+silent — each emits a `systemMessage` saying the call was allowed without being checked, because
+hook stderr on exit 0 reaches the debug log and nobody else.
+
+That document also carries the **check-ownership table**: one check, one owner, and the sibling
+that does not own it does not implement it.
+
 ## Evidence
 
 Each engine ships a corpus-replay eval you can run from its repository root
