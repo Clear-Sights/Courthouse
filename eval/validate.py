@@ -8,7 +8,8 @@ Checks, stdlib + git only:
   3. Every pinned (repo, ref, sha) actually exists on the remote: the tag or
      release branch is reachable and the commit it resolves to equals the sha.
   4. The declared version appears in the ref that ships it.
-  5. A git-subdir source's path exists in a shallow clone at the pinned ref.
+  5. The pinned tree really holds a plugin manifest at the entry's path, and the
+     version that manifest declares equals the version the entry advertises.
 
 Exit 0 iff every check passes.
 """
@@ -65,13 +66,24 @@ for pl in plugins:
     # fetches is a wrong answer to the only question the field is asked.
     check(pl.get("version", "") in ref,
           f"{name}: declared version {pl.get('version')!r} appears in ref {ref!r}")
-    if src["source"] == "git-subdir" and resolved == sha:
+    # Everything above is read from THIS repository, so the fields agree with each other while
+    # disagreeing with the plugin they point at. Fetching the pinned tree is the only check that
+    # binds this file to what a consumer installs, and both defects it catches had shipped:
+    # all three entries named a version their own plugin.json did not declare, and ward/makoto
+    # moved the manifest under `plugin/` without the entry following it, so the pinned tree had
+    # no manifest where the entry said. One path for every entry -- a source kind that skips the
+    # fetch is a source kind whose pin is never actually opened.
+    if resolved:
         with tempfile.TemporaryDirectory() as td:
-            subprocess.run(["git", "clone", "--depth", "1", "--branch", ref, src["url"], td],
+            subprocess.run(["git", "clone", "--depth", "1", "--branch", ref, remote_url(src), td],
                            check=True, capture_output=True, timeout=300)
-            sub = pathlib.Path(td) / src["path"]
-            check((sub / ".claude-plugin" / "plugin.json").is_file(),
-                  f"{name}: subdir '{src['path']}' holds a plugin manifest at {ref}")
+            where = src.get("path", "")
+            manifest = pathlib.Path(td, where, ".claude-plugin", "plugin.json")
+            present = manifest.is_file()
+            check(present, f"{name}: plugin manifest present at '{where or '.'}' in {ref}")
+            declared = json.loads(manifest.read_text(encoding="utf-8")).get("version") if present else None
+            check(declared == pl.get("version"),
+                  f"{name}: plugin at {ref} declares {declared!r}, entry says {pl.get('version')!r}")
 
 print(f"\n{len(failures)} failure(s)")
 sys.exit(1 if failures else 0)

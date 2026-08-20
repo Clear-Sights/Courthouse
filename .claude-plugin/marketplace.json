@@ -11,10 +11,11 @@
     {
       "name": "ward",
       "source": {
-        "source": "github",
-        "repo": "Clear-Sights/Ward",
-        "ref": "release/v1.1.0",
-        "sha": "916b3186c613713a30e06ef91c3ef1745bf022df"
+        "source": "git-subdir",
+        "url": "https://github.com/Clear-Sights/Ward.git",
+        "path": "plugin",
+        "ref": "v1.1.0",
+        "sha": "d8ada8e4b76bb764cfda0e284523ce6dacf79a0a"
       },
       "description": "Judges the pending act: 11 exact, no-substitute PreToolUse hard denies for actions dangerous regardless of intent or honesty.",
       "category": "workflow",
@@ -33,8 +34,8 @@
         "source": "git-subdir",
         "url": "https://github.com/Clear-Sights/Gyroscope.git",
         "path": "plugin",
-        "ref": "release/v1.1.0",
-        "sha": "093c99faeaa6898d7a6cf97ddf9263625519bf23"
+        "ref": "v1.1.0",
+        "sha": "c3a87c738b33b72ef3ed8ad1078e559a10c62fa7"
       },
       "description": "Judges the sequence: denies a costly call until the cheap call that licenses it is on record. One obligation ledger reconciled at Stop; exact predicates over event plus ledger, never over prose.",
       "category": "workflow",
@@ -51,12 +52,13 @@
     {
       "name": "makoto",
       "source": {
-        "source": "github",
-        "repo": "Clear-Sights/Makoto",
-        "ref": "release/v2.4.0",
-        "sha": "aa2e434e00d73a1eba131144363d2108a470bcb7"
+        "source": "git-subdir",
+        "url": "https://github.com/Clear-Sights/Makoto.git",
+        "path": "plugin",
+        "ref": "v2.4.0",
+        "sha": "a313a34544428de6bf04fbee48935add1396f591"
       },
-      "description": "Judges the statement: holds Claude Code to its word \u2014 every claim checked against the agent's own logged record; faked checks blocked, not warned (four narrow advisory self-checks excepted). Two-tier catalog (15 pre-checks, 19 Stop gates); blocking checks certified at zero false positives on the shipped corpus and gold negative sets \u2014 per-gate certification basis in the Makoto README.",
+      "description": "Judges the statement: holds Claude Code to its word — every claim checked against the agent's own logged record; faked checks blocked, not warned (four narrow advisory self-checks excepted). Two-tier catalog (15 pre-checks, 19 Stop gates); blocking checks certified at zero false positives on the shipped corpus and gold negative sets — per-gate certification basis in the Makoto README.",
       "category": "workflow",
       "tags": [
         "integrity",
