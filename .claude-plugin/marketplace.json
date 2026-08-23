@@ -34,8 +34,8 @@
         "source": "git-subdir",
         "url": "https://github.com/Clear-Sights/Keel.git",
         "path": "plugin",
-        "ref": "v2.0.0",
-        "sha": "a1885ac436d0efdbb73286d4792eccfb6d3afe93"
+        "ref": "v2.0.1",
+        "sha": "c86d5dc90af64754082d2b9b4ba0c64421032ea0"
       },
       "description": "Judges the sequence: denies a costly call until the cheap call that licenses it is on record, and names the construction that retires the guard for good. One obligation ledger reconciled at Stop; exact predicates over event plus ledger, never over prose.",
       "category": "workflow",
@@ -47,7 +47,7 @@
       ],
       "license": "Apache-2.0",
       "homepage": "https://github.com/Clear-Sights/Keel",
-      "version": "2.0.0"
+      "version": "2.0.1"
     },
     {
       "name": "makoto",
