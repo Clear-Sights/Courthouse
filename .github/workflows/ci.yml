@@ -3,10 +3,23 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Validate marketplace manifest and pinned sources
-        run: python3 eval/validate.py
+        run: |
+          set +e
+          python3 eval/validate.py
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "Validation passed: every check ran and passed." ;;
+            1) echo "Validation failed: at least one check disagreed." ;;
+            2) echo "Validation not evaluable: nothing disagreed, but at least one check could not be run." ;;
+            *) echo "Validator error: unexpected exit status $status." ;;
+          esac
+          exit "$status"
