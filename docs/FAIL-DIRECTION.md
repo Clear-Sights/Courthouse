@@ -1,7 +1,11 @@
 # Fail direction: what each judge does when its own machinery breaks
 
-**Status:** normative for the three plugins in this marketplace. Ward, Gyroscope and Makoto each
+**Status:** normative for the three plugins in this marketplace. Ward, Keel and Makoto each
 link here from their dispatcher, and each records which way it fell in its own log.
+
+The sequence judge shipped as **Gyroscope** through v1.1.0 and is **Keel** from v2.0.0. The
+incident recorded below was measured under the old name and is quoted as it was observed; the
+policy sections use the current one.
 
 ## The problem this settles
 
@@ -52,7 +56,7 @@ later moment at which Ward gets a second chance, so there is no fail-open that i
 
 Ward fails closed on malformed input, on a check that raises, and on a shim that cannot start.
 
-### 2. Makoto and Gyroscope — the statement, the sequence — fail OPEN on carriage, CLOSED on decision
+### 2. Makoto and Keel — the statement, the sequence — fail OPEN on carriage, CLOSED on decision
 
 Both judge things that remain judgeable later. An unevaluated claim can be caught at the next
 claim or at Stop; an unrecorded obligation is reconciled at the terminal. A missed evaluation costs
@@ -96,7 +100,7 @@ Failing closed licenses refusing. It does not license explaining the refusal wro
 ## How this is audited, not merely documented
 
 Each plugin writes `failed_closed: true|false` on every fault row in its own log
-(`dispatch_errors.jsonl` for Makoto, `decisions.jsonl` for Ward and Gyroscope). The table above is
+(`dispatch_errors.jsonl` for Makoto, `decisions.jsonl` for Ward and Keel). The table above is
 therefore checkable against the record rather than against these paragraphs — a plugin that drifts
 from its row leaves the evidence itself.
 
@@ -114,7 +118,7 @@ who does — and the other one does not implement it.
 |---|---|---|
 | WebFetch URL provenance (is this URL fabricated?) | **Makoto** — `content.unsourced_webfetch` | Ward. Ward's writ is the act itself; it treats `WebFetch`/`WebSearch`/`mcp__*` as world-reaching tools for its outbound-secret check and inspects nothing about URL provenance. |
 | Weakened TLS / JWT / host-key verification, protected-path writes, outbound secrets | **Ward** | Makoto. |
-| Obligation ordering (cheap call before costly call) | **Gyroscope** | Both. |
+| Obligation ordering (cheap call before costly call) | **Keel** | Both. |
 
 Ward carries no URL-provenance check and is not to acquire one. If a future check genuinely needs
 to live in two plugins, it does not go in either until this table says which one owns it.
