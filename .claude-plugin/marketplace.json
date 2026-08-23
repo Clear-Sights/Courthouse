@@ -29,25 +29,25 @@
       "version": "1.1.0"
     },
     {
-      "name": "gyroscope",
+      "name": "keel",
       "source": {
         "source": "git-subdir",
-        "url": "https://github.com/Clear-Sights/Gyroscope.git",
+        "url": "https://github.com/Clear-Sights/Keel.git",
         "path": "plugin",
-        "ref": "v1.1.0",
-        "sha": "c3a87c738b33b72ef3ed8ad1078e559a10c62fa7"
+        "ref": "v2.0.0",
+        "sha": "a1885ac436d0efdbb73286d4792eccfb6d3afe93"
       },
-      "description": "Judges the sequence: denies a costly call until the cheap call that licenses it is on record. One obligation ledger reconciled at Stop; exact predicates over event plus ledger, never over prose.",
+      "description": "Judges the sequence: denies a costly call until the cheap call that licenses it is on record, and names the construction that retires the guard for good. One obligation ledger reconciled at Stop; exact predicates over event plus ledger, never over prose.",
       "category": "workflow",
       "tags": [
         "security",
         "hooks",
         "guardrails",
-        "gyroscope"
+        "keel"
       ],
       "license": "Apache-2.0",
-      "homepage": "https://github.com/Clear-Sights/Gyroscope",
-      "version": "1.1.0"
+      "homepage": "https://github.com/Clear-Sights/Keel",
+      "version": "2.0.0"
     },
     {
       "name": "makoto",

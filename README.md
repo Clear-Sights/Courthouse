@@ -37,7 +37,7 @@ statement** — and share nothing else: each installs alone, each is a pure
 ```console
 $ claude plugin marketplace add Clear-Sights/Courthouse
 $ claude plugin install ward@courthouse
-$ claude plugin install gyroscope@courthouse
+$ claude plugin install keel@courthouse
 $ claude plugin install makoto@courthouse
 ```
 
