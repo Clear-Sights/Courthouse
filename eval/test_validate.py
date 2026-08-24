@@ -305,5 +305,64 @@ class ValidatorTests(unittest.TestCase):
         self.assertIn("1 passed, 0 failed, 0 not-evaluable", output.getvalue())
 
 
+class VerdictLineTests(unittest.TestCase):
+    """What each exit status MEANS, stated by the program that produces it.
+
+    These sentences used to live in a `case` block in .github/workflows/ci.yml. No test could
+    reach them there, and only the exit-0 branch was ever observed running -- so three of the
+    four were shipped on the strength of reading them.
+    """
+
+    def test_every_status_the_program_can_return_has_a_verdict(self):
+        """A status with no sentence would print a bare KeyError traceback at the one place a
+        human reads this: a status is only as good as the words that arrive with it."""
+        reachable = {0, 1, 2, validate.EXIT_INTERNAL_ERROR}
+        self.assertEqual(reachable, set(validate.VERDICTS))
+
+    def test_each_status_says_something_different(self):
+        self.assertEqual(len(validate.VERDICTS), len(set(validate.VERDICTS.values())))
+
+    def _cli(self, run):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
+            status = validate.cli(run)
+        return status, output.getvalue()
+
+    def test_a_crash_is_not_reported_as_a_check_that_disagreed(self):
+        """The C-1 defect one layer out: an uncaught exception exits 1 on its own, and 1 already
+        means a check FAILED. A validator that broke has ruled on nothing."""
+        status, printed = self._cli(lambda: 1 // 0)
+        self.assertEqual(validate.EXIT_INTERNAL_ERROR, status)
+        self.assertNotEqual(1, status)
+        self.assertIn("failed before it could rule", printed)
+
+    def test_a_crash_still_shows_the_traceback(self):
+        """Naming the failure must not replace diagnosing it."""
+        errors = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(errors):
+            validate.cli(lambda: 1 // 0)
+        self.assertIn("ZeroDivisionError", errors.getvalue())
+
+    def test_a_normal_status_passes_through_untouched(self):
+        for status in (0, 1, 2):
+            with self.subTest(status=status):
+                self.assertEqual((status, ""), self._cli(lambda status=status: status))
+
+    def test_main_prints_the_verdict_for_the_status_it_returns(self):
+        """The join that matters: the sentence printed is the one belonging to the status
+        returned, not a sentence chosen beside it."""
+        for outcome, expected in ((validate.Outcome.PASS, 0),
+                                  (validate.Outcome.FAIL, 1),
+                                  (validate.Outcome.NOT_EVALUABLE, 2)):
+            with self.subTest(outcome=outcome):
+                results = [validate.CheckResult(outcome, "planted")]
+                output = io.StringIO()
+                with mock.patch.object(validate, "validate_manifest", return_value=results), \
+                        contextlib.redirect_stdout(output):
+                    status = validate.main()
+                self.assertEqual(expected, status)
+                self.assertIn(validate.VERDICTS[expected], output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
