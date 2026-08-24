@@ -48,3 +48,15 @@ jobs:
         # Only --repo . -- the estate scan needs the sibling checkouts, which CI does not have,
         # and a check that cannot see its subject must not pretend to rule on it.
         run: python3 eval/claims.py --repo . --claims-only
+      - name: Every check has been seen failing on a planted fault
+        # The engine emits eleven finding types; eight of them had never once been observed
+        # firing against a real repository -- only against fixtures. A fixture proves the code
+        # path runs, not that the rule survives a real README, whose exclusion machinery is
+        # exactly what could swallow a planted fault before it becomes a finding.
+        #
+        # This plants each fault into a throwaway estate, requires the engine to go red naming
+        # the expected finding AND surface (a nonzero exit alone is not evidence a check fired),
+        # then requires the revert to restore the baseline exactly. It carries a negative control
+        # that catches a check hardwired to fire always, and prints the calibration rows this
+        # engine cannot see rather than letting a clean summary imply full coverage.
+        run: python3 eval/calibrate.py

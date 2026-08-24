@@ -367,8 +367,11 @@ def inspect_repository(repository: pathlib.Path, tiers: list[TierRow] | None = N
                           "its effect on a live session's outcome is unmeasured")
         for entry in ledger:
             if "../" in entry.command.replace("\\", "/"):
-                _tier_finding(report, surface, entry.line, declaration.tier, "FOREIGN-EVIDENCE",
-                              entry.command)
+                # The surface is the ledger, not the README. entry.line indexes MEASURED.tsv, so
+                # naming the README here sent a reader to whatever text happened to occupy that
+                # line number in a different file -- a finding nobody could act on.
+                _tier_finding(report, str(ledger_path), entry.line, declaration.tier,
+                              "FOREIGN-EVIDENCE", entry.command)
         if declaration.tier == "RECORD":
             for line_number, line in enumerate(text.splitlines(), 1):
                 if "claude plugin install" in line:

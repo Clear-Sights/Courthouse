@@ -210,6 +210,14 @@ class TierFindingTests(unittest.TestCase):
         self.assertIn("FOREIGN-EVIDENCE", self.tier_findings(foreign))
         self.assertNotIn("FOREIGN-EVIDENCE", self.tier_findings(local))
 
+    def test_foreign_evidence_names_the_ledger_it_read_not_the_readme(self):
+        # entry.line indexes MEASURED.tsv, so a README surface pointed the reader at whatever
+        # sat on that line of the wrong file. The row must name the file it was computed from.
+        report = self.inspect(self.SHIPPED_LINE, command="python3 ../Ward/eval.py")
+        row = next(r for r in report.rows if r.finding == "FOREIGN-EVIDENCE")
+        self.assertEqual(row.surface, str(self.repo / "MEASURED.tsv"))
+        self.assertEqual(row.line, 2)
+
     def test_record_install_fires_but_shipped_install_is_silent(self):
         record = self.inspect(self.RECORD_LINE + "\nclaude plugin install thing", "RECORD")
         shipped = self.inspect(self.SHIPPED_LINE + "\nclaude plugin install thing", "SHIPPED")
