@@ -1,6 +1,8 @@
 # Courthouse
 
-**One bench, three judges.** Courthouse is the plugin marketplace for the three
+The bench: a plugin marketplace. It states only the facts it owns and links the rest.
+
+**One bench, three judges.[^m-plugin-count]** Courthouse is the plugin marketplace for the three
 Clear-Sights guard engines. They split one taxonomy — **act, sequence,
 statement** — and share nothing else: each installs alone, each is a pure
 `stdlib` Python hook, and none inherits or implies the others' coverage.
@@ -11,7 +13,7 @@ statement** — and share nothing else: each installs alone, each is a pure
 | **Keel** | the **sequence** | a session neither capsizes nor gets lost | [Clear-Sights/Keel](https://github.com/Clear-Sights/Keel) |
 | **Makoto** | the **statement** | words aren't empty | [Clear-Sights/Makoto](https://github.com/Clear-Sights/Makoto) |
 
-- **Ward** is stateless: an ordered 11-row table of exact denials over the one
+- **Ward** is stateless: an ordered table of exact denials over the one
   pending tool call — `verify=False`, JWT `alg=none`, auto-added host keys,
   secrets in outbound URLs, shell-startup writes — denied with a citation and a
   retry hint *before* the call executes.
@@ -41,25 +43,25 @@ $ claude plugin install keel@courthouse
 $ claude plugin install makoto@courthouse
 ```
 
-Install any subset — the three verdicts are independent.
+Install any subset — the three verdicts[^m-plugin-count] are independent.
 
 ## The shared trust boundary
 
-All three engines run inside the boundary of the very process they constrain: each is a hook fed
+All three engines[^m-plugin-count] run inside the boundary of the very process they constrain: each is a hook fed
 by the agent's own event stream, and intent is unobservable from outside that boundary, so they
 judge only what crosses it — acts, sequences, and statements. A policy whose behavior stays inside
 the check surface passes, whoever or whatever drives it. They constrain capability, not intent.
 
-Why three engines and not four: act/sequence/statement is a partition of what an external judge
+Why three engines[^m-plugin-count] and not four: act/sequence/statement is a partition of what an external judge
 can observe, not a growing feature list. From outside the process there is nothing else to rule
 on — a single pending event is an act, an ordering of events is a sequence, and text emitted about
-them is a statement — so a candidate fourth engine would either judge one of those three surfaces
+them is a statement — so a candidate fourth engine would either judge one of those three surfaces[^m-plugin-count]
 (and belong to an existing bench seat) or claim to judge intent, which no observer at this
-boundary can see. Three judges exhaust the observable.
+boundary can see. Three judges[^m-plugin-count] exhaust the observable.
 
 ## When a judge's own machinery breaks
 
-Three plugins share one hook edge, so "what happens when a check cannot run?" is a bench-wide
+Three plugins[^m-plugin-count] share one hook edge, so "what happens when a check cannot run?" is a bench-wide
 question, not three private ones — and it was answered three different ways until one input made
 all three answer at once. A single non-UTF-8 byte in a hook payload got Makoto to allow the call
 unchecked, Ward to deny a benign file citing a parse failure that was not real, and the sequence
@@ -70,7 +72,7 @@ fail direction follows *recoverability*, not plugin taste: Ward rules on the act
 un-done at the next event, so it fails closed on everything; Makoto and Keel rule on things
 still judgeable later, so they fail open on carriage and closed on decision. No fail-open is
 silent — each emits a `systemMessage` saying the call was allowed without being checked, because
-hook stderr on exit 0 reaches the debug log and nobody else.
+hook stderr on a successful exit reaches the debug log and nobody else.
 
 That document also carries the **check-ownership table**: one check, one owner, and the sibling
 that does not own it does not implement it.
@@ -79,8 +81,9 @@ that does not own it does not implement it.
 
 Each engine ships a corpus-replay eval you can run from its repository root
 with nothing but the standard library — `python3 eval/replay.py` — replaying
-recorded sessions through the real dispatcher: Ward 6/6, Keel 5/5,
-Makoto 5/5. Exit 0 iff every session meets its expectation. Those counts are replays of authored
+recorded sessions through the real dispatcher. Each engine's own README publishes its
+session counts, and each harness exits nonzero unless every session meets its expectation.
+Those runs are replays of authored
 fixtures through the real dispatchers — they prove each dispatcher fires where its fixtures say it
 should, not that a live session behaves differently for having the hook installed; live-session
 effect on agent behavior is unmeasured (Keel's own README says the same: "Built and
@@ -98,3 +101,5 @@ never the reverse.
 The marketplace manifest in this repository is Apache-2.0 — see
 [LICENSE](LICENSE). Each engine is licensed in its own repository
 (all three Apache-2.0).
+
+[^m-plugin-count]: The marketplace manifest's plugin entries, counted by `python3 -c 'import json; print(len(json.load(open(".claude-plugin/marketplace.json"))["plugins"]))'`.

@@ -9,16 +9,16 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
-import enum
 import json
 import pathlib
 import re
 import subprocess
 import sys
 import tempfile
-import traceback
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any, ContextManager
+
+from outcomes import CheckResult, EXIT_INTERNAL_ERROR, Outcome, VERDICTS, cli, exit_code
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -31,18 +31,6 @@ CLONE_TIMEOUT_SECONDS = 300
 
 VERSION_TOKEN = re.compile(r"\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]+)?")
 SHA = re.compile(r"[0-9a-f]{40}")
-
-
-class Outcome(enum.Enum):
-    PASS = "PASS"
-    FAIL = "FAIL"
-    NOT_EVALUABLE = "NOT-EVALUABLE"
-
-
-@dataclasses.dataclass(frozen=True)
-class CheckResult:
-    outcome: Outcome
-    message: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -364,34 +352,6 @@ def real_tree_probe(url: str, ref: str) -> Iterator[ProbeResult]:
         )
 
 
-# The status a run reports when the validator itself broke before it could rule. It is separate
-# from 1 because an uncaught exception exits 1 on its own, and 1 already means "a check
-# disagreed" -- reporting a crash as a disagreement is the same lie this file exists to refuse,
-# one layer out: nothing was checked, so nothing may be reported about the manifest.
-EXIT_INTERNAL_ERROR = 3
-
-# One writer for what each status means. These sentences used to live in a `case` block in
-# .github/workflows/ci.yml, where no test could reach them and only the exit-0 branch had ever
-# been observed running. Here the suite pins every branch.
-VERDICTS = {
-    0: "Validation passed: every check ran and passed.",
-    1: "Validation failed: at least one check disagreed.",
-    2: "Validation not evaluable: nothing disagreed, but at least one check could not be run.",
-    EXIT_INTERNAL_ERROR: (
-        "Validator error: the validator failed before it could rule, so the manifest is "
-        "unchecked. The traceback above is the failure, not a finding about the manifest."
-    ),
-}
-
-
-def exit_code(results: list[CheckResult]) -> int:
-    if any(result.outcome is Outcome.FAIL for result in results):
-        return 1
-    if any(result.outcome is Outcome.NOT_EVALUABLE for result in results):
-        return 2
-    return 0
-
-
 def print_report(results: list[CheckResult]) -> None:
     for result in results:
         print(f"{result.outcome.value:<15} {result.message}")
@@ -420,19 +380,5 @@ def main() -> int:
     return status
 
 
-def cli(run: Callable[[], int] = main) -> int:
-    """Run `run`, and give a validator that broke its own status rather than a check's.
-
-    `run` is injected for the same reason the probes are: the crash path is a branch like any
-    other, and a branch no test can reach is a branch nobody has seen work.
-    """
-    try:
-        return run()
-    except Exception:  # noqa: BLE001 -- the traceback is printed, never swallowed
-        traceback.print_exc()
-        print(VERDICTS[EXIT_INTERNAL_ERROR])
-        return EXIT_INTERNAL_ERROR
-
-
 if __name__ == "__main__":
-    sys.exit(cli())
+    sys.exit(cli(main))

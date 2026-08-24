@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 
 import validate
+import outcomes
 
 
 PINNED_SHA = "a" * 40
@@ -50,6 +51,9 @@ def successful_remote(_url, ref):
 
 
 class ValidatorTests(unittest.TestCase):
+    def test_outcome_is_shared_contract(self):
+        self.assertIs(validate.Outcome, outcomes.Outcome)
+
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.tree = pathlib.Path(self.temporary_directory.name)

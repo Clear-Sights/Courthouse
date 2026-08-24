@@ -1,0 +1,5 @@
+KEY	VALUE	DENOMINATOR	COMMAND	SUBJECT
+# One writer per fact: a number owned by another repository is linked, never
+# restated here, so the two spellings cannot drift. Evidence that is a citation
+# rather than a command has no row shape yet -- see the residue note in claims.py.
+plugin-count	3	-	python3 -c 'import json; print(len(json.load(open(".claude-plugin/marketplace.json"))["plugins"]))'	plugins on the Courthouse bench

@@ -1,0 +1,27 @@
+# What each repository declares itself to be. This is an OWNER DECLARATION, not an inference:
+# nothing in this estate computes a repository's tier from its contents, because a page that
+# decided its own tier would grant itself whatever claims it wanted to make.
+#
+# The tier gates what the README may assert. eval/claims.py reads this file; a README whose
+# opening section does not carry its LINE verbatim is a finding, as is a SHIPPED page that omits
+# its efficacy limit, a page citing evidence another repository owns, or a RECORD page selling an
+# install.
+#
+# SHIPPED  installable, versioned, published in the marketplace. May cite replay evidence.
+#          May never claim outcome efficacy: every replay is authored fixtures through the real
+#          dispatcher, which proves it fires where the fixture says, not that a live session goes
+#          better for having it installed.
+# BENCH    the marketplace itself. States only facts it owns; links every fact another
+#          repository writes, so one fact never has two writers that can drift apart.
+# RECORD   a development record. Runnable from a checkout, not published as a product. Its
+#          numbers are evidence about how the shipped work was built.
+#
+# REPO	TIER	LINE
+Keel	SHIPPED	Shipped plugin — installable and versioned. The dispatcher is replay-tested against authored sessions; its effect on a live session's outcome is unmeasured.
+Ward	SHIPPED	Shipped plugin — installable and versioned. The dispatcher is replay-tested against authored sessions; its effect on a live session's outcome is unmeasured.
+Makoto	SHIPPED	Shipped plugin — installable and versioned. The dispatcher is replay-tested against authored sessions; its effect on a live session's outcome is unmeasured.
+courthouse	BENCH	The bench: a plugin marketplace. It states only the facts it owns and links the rest.
+Swale	RECORD	A development record, not a product. Runnable from a checkout, never published as one; its numbers are evidence about how the shipped work was built.
+gyroscope-dev	RECORD	A development record, not a product. Runnable from a checkout, never published as one; its numbers are evidence about how the shipped work was built.
+small-tools	RECORD	A development record, not a product. Runnable from a checkout, never published as one; its numbers are evidence about how the shipped work was built.
+straight-to-solved	RECORD	A development record, not a product. Runnable from a checkout, never published as one; its numbers are evidence about how the shipped work was built.

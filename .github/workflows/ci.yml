@@ -38,3 +38,13 @@ jobs:
         # written once, in validate.py, where the suite above pins every branch of it -- not
         # here, where nothing could test it and only the exit-0 branch had ever been seen run.
         run: python3 eval/validate.py
+      - name: Every number this README publishes is joined to a measurement
+        # An instrument wired to nothing is the defect it exists to find. gyroscope-dev's
+        # proof-test ratchet has been reading FAIL for a long time with no gate downstream of
+        # it, and its README still publishes the figure from before the slide. This step is the
+        # terminal sink for claims.py: a number that arrives in this README without an anchor
+        # into MEASURED.tsv turns the build red, on the commit that adds it.
+        #
+        # Only --repo . -- the estate scan needs the sibling checkouts, which CI does not have,
+        # and a check that cannot see its subject must not pretend to rule on it.
+        run: python3 eval/claims.py --repo . --claims-only
