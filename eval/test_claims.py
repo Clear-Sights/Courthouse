@@ -43,6 +43,31 @@ class ClaimScannerTests(unittest.TestCase):
         self.assertIn(("CLAIM", "bare", "105"), rows)
         self.assertIn(("EXCLUDED", "url", "105"), rows)
 
+    def test_html_attribute_excludes_value_but_scans_alt_text(self):
+        rows = self.classes('<img src="x.png" alt="covers 700 cases" width="701">')
+        self.assertIn(("CLAIM", "bare", "700"), rows)
+        self.assertIn(("EXCLUDED", "html-attribute", "701"), rows)
+
+    def test_cross_reference_excludes_artifact_but_not_ordinary_task_prose(self):
+        rows = self.classes("see Task #19; the task took 9 minutes")
+        self.assertIn(("EXCLUDED", "cross-reference", "19"), rows)
+        self.assertIn(("CLAIM", "bare", "9"), rows)
+
+    def test_new_exclusion_counts_appear_in_summary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory)
+            (repo / "README.md").write_text(
+                '<img width="700"> see ADR 4\n', encoding="utf-8")
+            (repo / "MEASURED.tsv").write_text(
+                "KEY\tVALUE\tDENOMINATOR\tCOMMAND\tSUBJECT\n", encoding="utf-8")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(io.StringIO()):
+                claims.main(["--repo", str(repo)])
+        summary = next(line for line in stdout.getvalue().splitlines()
+                       if line.startswith("SUMMARY\t"))
+        self.assertIn("html-attribute=1", summary)
+        self.assertIn("cross-reference=1", summary)
+
     def test_date_excludes_date_but_not_plain_year(self):
         rows = self.classes("2026-08-24 and 2026")
         self.assertEqual(3, sum(row[1] == "date" for row in rows))

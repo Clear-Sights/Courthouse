@@ -34,7 +34,8 @@ from outcomes import CheckResult, Outcome, VERDICTS, cli, exit_code
 HEADER = ("CLASS", "SURFACE", "LINE", "KIND-OR-RULE", "NUMERATOR",
           "DENOMINATOR", "ANCHOR", "FINDING", "TEXT")
 EXCLUSION_RULES = ("generated-block", "source-fence", "footnote-definition", "url",
-                   "date", "version", "identifier", "ordered-list-marker")
+                   "html-attribute", "cross-reference", "date", "version", "identifier",
+                   "ordered-list-marker")
 FINDING_TYPES = ("UNANCHORED", "UNRESOLVED", "MISMATCH", "ORPHAN",
                  "DUPLICATE-KEY", "EMPTY-COMMAND", "LEDGER-UNVERIFIED", "TIER-ABSENT",
                  "TIER-UNDECLARED", "EFFICACY-UNDECLARED", "FOREIGN-EVIDENCE",
@@ -49,6 +50,10 @@ DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 VERSION_RE = re.compile(r"(?<![A-Za-z0-9_.])v?\d+\.\d+(?:\.\d+)*(?![A-Za-z0-9_.%-])", re.I)
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})\s*([^\s`]*)")
 SOURCE_LANGUAGES = {"python", "json", "yaml", "bash", "sh", "diff", "js", "ts"}
+HTML_ATTRIBUTE_PREFIX_RE = re.compile(
+    r"<[^<>]*\s[A-Za-z_:][A-Za-z0-9_.:-]*\s*=\s*[\"']?$")
+CROSS_REFERENCE_PREFIX_RE = re.compile(
+    r"(?:\bTask\s*#?|\bSPEC-|\bDESIGN\s+DECISION\s*#?|\bADR\s*#?|§)\s*$", re.I)
 WORDS = {
     "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
     "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
@@ -133,6 +138,10 @@ def _exclusion(line: str, start: int, end: int, *, generated: bool,
         return "footnote-definition"
     if any(start >= match.start() and end <= match.end() for match in URL_RE.finditer(line)):
         return "url"
+    if HTML_ATTRIBUTE_PREFIX_RE.search(line[:start]):
+        return "html-attribute"
+    if CROSS_REFERENCE_PREFIX_RE.search(line[:start]):
+        return "cross-reference"
     if any(start >= match.start() and end <= match.end() for match in DATE_RE.finditer(line)):
         return "date"
     if any(start >= match.start() and end <= match.end() for match in VERSION_RE.finditer(line)):

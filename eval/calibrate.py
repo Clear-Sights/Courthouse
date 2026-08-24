@@ -158,6 +158,18 @@ PLANTS = (
           _replace("courthouse/MEASURED.tsv", "plugin-count\t3\t", "plugin-count\t4\t"),
           POLARITY_FIRES, "LEDGER-UNVERIFIED", "courthouse/MEASURED.tsv",
           verify_evidence=True),
+    Plant("html-attribute-excluded", _append(
+          "courthouse/README.md", '\n<img src="x.png" alt="a" width="700">\n'),
+          POLARITY_SILENT, "UNANCHORED", "courthouse/README.md"),
+    Plant("html-attribute-narrow", _append(
+          "courthouse/README.md", '\n<img src="x.png" alt="covers 700 cases">\n'),
+          POLARITY_FIRES, "UNANCHORED", "courthouse/README.md"),
+    Plant("cross-reference-excluded", _append(
+          "courthouse/README.md", "\nsee Task 9 for detail\n"),
+          POLARITY_SILENT, "UNANCHORED", "courthouse/README.md"),
+    Plant("cross-reference-narrow", _append(
+          "courthouse/README.md", "\nthe task took 9 minutes\n"),
+          POLARITY_FIRES, "UNANCHORED", "courthouse/README.md"),
 )
 
 
