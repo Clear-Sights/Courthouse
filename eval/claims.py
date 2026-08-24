@@ -24,6 +24,7 @@ import csv
 import dataclasses
 import pathlib
 import re
+import subprocess
 import sys
 from collections import Counter
 
@@ -35,7 +36,7 @@ HEADER = ("CLASS", "SURFACE", "LINE", "KIND-OR-RULE", "NUMERATOR",
 EXCLUSION_RULES = ("generated-block", "source-fence", "footnote-definition", "url",
                    "date", "version", "identifier", "ordered-list-marker")
 FINDING_TYPES = ("UNANCHORED", "UNRESOLVED", "MISMATCH", "ORPHAN",
-                 "DUPLICATE-KEY", "EMPTY-COMMAND", "TIER-ABSENT",
+                 "DUPLICATE-KEY", "EMPTY-COMMAND", "LEDGER-UNVERIFIED", "TIER-ABSENT",
                  "TIER-UNDECLARED", "EFFICACY-UNDECLARED", "FOREIGN-EVIDENCE",
                  "RECORD-SELLS-INSTALL")
 NUMBER = r"\d+(?:[.,]\d+)*%?"
@@ -57,6 +58,7 @@ WORDS = {
 }
 IRREGULAR_PLURALS = {"people", "men", "women", "children", "teeth", "feet", "mice", "geese", "data", "criteria", "analyses", "indices"}
 WORD_RE = re.compile(r"\b(" + "|".join(WORDS) + r")\s+([A-Za-z][A-Za-z'-]*)", re.I)
+EVIDENCE_TIMEOUT_SECONDS = 10
 
 
 @dataclasses.dataclass
@@ -298,7 +300,8 @@ def _tier_finding(report: Report, surface: str, line: int, tier: str,
 
 
 def inspect_repository(repository: pathlib.Path, tiers: list[TierRow] | None = None,
-                       tiers_path: pathlib.Path | None = None) -> Report:
+                       tiers_path: pathlib.Path | None = None,
+                       verify_evidence: bool = False) -> Report:
     report = Report()
     readme = repository / "README.md"
     surface = str(readme)
@@ -351,6 +354,44 @@ def inspect_repository(repository: pathlib.Path, tiers: list[TierRow] | None = N
                                    entry.denominator, entry.key, finding, entry.text))
             report.results.append(CheckResult(Outcome.FAIL, finding))
 
+    if verify_evidence:
+        for entry in ledger:
+            row_name = f"{ledger_path}:{entry.line} ({entry.key})"
+            if not entry.command.strip():
+                report.informational.append(
+                    f"NOT-EVALUABLE\t{row_name}: empty command")
+                report.results.append(CheckResult(Outcome.NOT_EVALUABLE, row_name))
+                continue
+            try:
+                completed = subprocess.run(
+                    entry.command, shell=True, cwd=repository, text=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+                    timeout=EVIDENCE_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                report.informational.append(
+                    f"NOT-EVALUABLE\t{row_name}: timed out after "
+                    f"{EVIDENCE_TIMEOUT_SECONDS} seconds")
+                report.results.append(CheckResult(Outcome.NOT_EVALUABLE, row_name))
+                continue
+            if completed.returncode != 0:
+                report.informational.append(
+                    f"NOT-EVALUABLE\t{row_name}: command exited with status "
+                    f"{completed.returncode}")
+                report.results.append(CheckResult(Outcome.NOT_EVALUABLE, row_name))
+                continue
+            stdout = completed.stdout
+            if not stdout or "\n" in stdout.removesuffix("\n"):
+                report.informational.append(
+                    f"NOT-EVALUABLE\t{row_name}: command output is not a single value")
+                report.results.append(CheckResult(Outcome.NOT_EVALUABLE, row_name))
+                continue
+            if stdout not in {entry.value, entry.value + "\n"}:
+                finding = "LEDGER-UNVERIFIED"
+                report.rows.append(Row("LEDGER", str(ledger_path), entry.line, "row",
+                                       entry.value, entry.denominator, entry.key, finding,
+                                       entry.text))
+                report.results.append(CheckResult(Outcome.FAIL, finding))
+
     if tiers is not None:
         tier_path = tiers_path or pathlib.Path(__file__).with_name("TIERS.tsv")
         declaration = _tier_for(repository, tiers)
@@ -380,12 +421,23 @@ def inspect_repository(repository: pathlib.Path, tiers: list[TierRow] | None = N
     return report
 
 
+class ClaimsArgumentParser(argparse.ArgumentParser):
+    def parse_args(self, args=None, namespace=None):
+        parsed = super().parse_args(args, namespace)
+        # A repository may execute its own evidence. Estate mode reads other repositories, and
+        # an engine must never execute a command declared inside another repository's page.
+        if parsed.verify_evidence and parsed.estate is not None:
+            self.error("--verify-evidence is valid only with --repo, never with --estate")
+        return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = ClaimsArgumentParser(description=__doc__)
     targets = parser.add_mutually_exclusive_group(required=True)
     targets.add_argument("--repo", type=pathlib.Path)
     targets.add_argument("--estate", type=pathlib.Path)
     parser.add_argument("--claims-only", action="store_true")
+    parser.add_argument("--verify-evidence", action="store_true")
     return parser
 
 
@@ -405,7 +457,8 @@ def main(argv: list[str] | None = None) -> int:
         combined.informational.append(f"NOT-EVALUABLE\t{tiers_path}: {tiers_error}")
         combined.results.append(CheckResult(Outcome.NOT_EVALUABLE, str(tiers_path)))
     for repository in repositories:
-        report = inspect_repository(repository, tiers, tiers_path)
+        report = inspect_repository(repository, tiers, tiers_path,
+                                    verify_evidence=arguments.verify_evidence)
         combined.rows.extend(report.rows)
         combined.results.extend(report.results)
         combined.informational.extend(report.informational)

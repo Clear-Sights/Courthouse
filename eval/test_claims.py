@@ -88,12 +88,12 @@ class RepositoryFindingTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def write(self, readme, rows=()):
+    def write(self, readme, rows=(), verify_evidence=False):
         (self.repo / "README.md").write_text(readme, encoding="utf-8")
         if rows is not None:
             ledger = "KEY\tVALUE\tDENOMINATOR\tCOMMAND\tSUBJECT\n" + "\n".join(rows)
             (self.repo / "MEASURED.tsv").write_text(ledger + "\n", encoding="utf-8")
-        return claims.inspect_repository(self.repo)
+        return claims.inspect_repository(self.repo, verify_evidence=verify_evidence)
 
     def findings(self, report):
         return [row.finding for row in report.rows if row.finding != "-"]
@@ -122,6 +122,47 @@ class RepositoryFindingTests(unittest.TestCase):
 
     def test_empty_command_only(self):
         self.assertEqual(["EMPTY-COMMAND"], self.findings(self.write("5 checks[^m-k]", ["k\t5\t-\t\tchecks"])))
+
+    def test_verified_ledger_value_has_no_finding(self):
+        report = self.write("5[^m-k]", ["k\t5\t-\tprintf 5\tthing"], verify_evidence=True)
+        self.assertEqual([], self.findings(report))
+
+    def test_wrong_ledger_value_names_surface_and_line(self):
+        report = self.write("5[^m-k]", ["k\t5\t-\tprintf 6\tthing"], verify_evidence=True)
+        rows = [row for row in report.rows if row.finding == "LEDGER-UNVERIFIED"]
+        self.assertEqual(1, len(rows))
+        self.assertEqual((str(self.repo / "MEASURED.tsv"), 2), (rows[0].surface, rows[0].line))
+
+    def test_nonzero_evidence_is_not_evaluable_not_mismatch(self):
+        report = self.write("5[^m-k]", ["k\t5\t-\tsh -c 'exit 7'\tthing"],
+                            verify_evidence=True)
+        self.assertNotIn("LEDGER-UNVERIFIED", self.findings(report))
+        self.assertEqual([claims.Outcome.NOT_EVALUABLE],
+                         [result.outcome for result in report.results])
+        self.assertIn("status 7", report.informational[0])
+
+    def test_timed_out_evidence_is_not_evaluable_not_mismatch(self):
+        with mock.patch.object(claims, "EVIDENCE_TIMEOUT_SECONDS", 0.01):
+            report = self.write("5[^m-k]", ["k\t5\t-\tpython3 -c 'import time; time.sleep(1)'\tthing"],
+                                verify_evidence=True)
+        self.assertNotIn("LEDGER-UNVERIFIED", self.findings(report))
+        self.assertEqual([claims.Outcome.NOT_EVALUABLE],
+                         [result.outcome for result in report.results])
+        self.assertIn("timed out", report.informational[0])
+
+    def test_without_verify_flag_does_not_execute_command(self):
+        with mock.patch.object(claims.subprocess, "run",
+                               side_effect=AssertionError("evidence command executed")):
+            report = self.write("5[^m-k]", ["k\t5\t-\tsh -c 'exit 99'\tthing"])
+        self.assertEqual([], self.findings(report))
+
+    def test_evidence_exit_contract_all_states(self):
+        passing = self.write("5[^m-k]", ["k\t5\t-\tprintf 5\tthing"], True)
+        failing = self.write("5[^m-k]", ["k\t5\t-\tprintf 6\tthing"], True)
+        unknown = self.write("5[^m-k]", ["k\t5\t-\tsh -c 'exit 7'\tthing"], True)
+        self.assertEqual([0, 1, 2],
+                         [claims.exit_code(report.results)
+                          for report in (passing, failing, unknown)])
 
     def test_invalid_readme_encoding_is_not_evaluable(self):
         (self.repo / "README.md").write_bytes(b"\xff 5")
@@ -235,7 +276,8 @@ class TierFindingTests(unittest.TestCase):
         with mock.patch.object(claims, "read_tiers", return_value=(None, "bad header")), \
                 mock.patch.object(claims, "build_parser") as parser:
             parser.return_value.parse_args.return_value = type(
-                "Arguments", (), {"repo": self.repo, "estate": None, "claims_only": False})()
+                "Arguments", (), {"repo": self.repo, "estate": None, "claims_only": False,
+                                   "verify_evidence": False})()
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(io.StringIO()):
                 status = claims.main([])
@@ -257,6 +299,11 @@ class CliTests(unittest.TestCase):
             parser.parse_args([])
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             parser.parse_args(["--repo", ".", "--estate", "."])
+
+    def test_verify_evidence_is_rejected_with_estate(self):
+        parser = claims.build_parser()
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parser.parse_args(["--estate", ".", "--verify-evidence"])
 
     def test_courthouse_is_fully_measured(self):
         report = claims.inspect_repository(pathlib.Path(__file__).resolve().parent.parent)
