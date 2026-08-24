@@ -3,10 +3,38 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Unit tests for the validator
+        run: |
+          # A validator whose own tests have not run has not earned the right to rule, so this
+          # step comes first. `unittest discover` exits 0 when it collects NOTHING, so the count
+          # is what constrains this step: rename the test file, or break its import, and a bare
+          # `discover` call would report green forever on a suite that no longer exists. Every
+          # path out of here that is not "N tests ran, all passed" is red.
+          set +e
+          python3 -m unittest discover -s eval -v 2>&1 | tee /tmp/unittest.log
+          status=${PIPESTATUS[0]}
+          set -e
+          ran=$(sed -n 's/^Ran \([0-9][0-9]*\) test.*/\1/p' /tmp/unittest.log | tail -1)
+          if [ "$status" -ne 0 ]; then
+            echo "Unit tests failed with status $status."
+            exit "$status"
+          fi
+          if [ -z "$ran" ] || [ "$ran" -eq 0 ]; then
+            echo "No tests were collected. Discovery found nothing under eval/, and finding"
+            echo "nothing is not the same as finding nothing wrong."
+            exit 1
+          fi
+          echo "Unit tests passed: $ran tests ran."
       - name: Validate marketplace manifest and pinned sources
+        # The validator names its own exit status in its last line: 0 passed, 1 a check
+        # disagreed, 2 a check could not be run, 3 the validator itself broke. That sentence is
+        # written once, in validate.py, where the suite above pins every branch of it -- not
+        # here, where nothing could test it and only the exit-0 branch had ever been seen run.
         run: python3 eval/validate.py
