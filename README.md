@@ -1,5 +1,7 @@
 # Courthouse
 
+The bench: a plugin marketplace. It states only the facts it owns and links the rest.
+
 **One bench, three judges.[^m-plugin-count]** Courthouse is the plugin marketplace for the three
 Clear-Sights guard engines. They split one taxonomy — **act, sequence,
 statement** — and share nothing else: each installs alone, each is a pure

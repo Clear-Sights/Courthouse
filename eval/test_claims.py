@@ -3,6 +3,7 @@ import io
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 import claims
 
@@ -147,6 +148,98 @@ class RepositoryFindingTests(unittest.TestCase):
         (self.repo / "README.md").write_bytes(b"\xff")
         unknown = claims.inspect_repository(self.repo)
         self.assertEqual([0, 1, 2], [claims.exit_code(value.results) for value in (passing, failing, unknown)])
+
+
+class TierFindingTests(unittest.TestCase):
+    SHIPPED_LINE = ("Shipped plugin — installable and versioned. The dispatcher is replay-tested "
+                    "against authored sessions; its effect on a live session's outcome is unmeasured.")
+    RECORD_LINE = ("A development record, not a product. Runnable from a checkout, never published "
+                   "as one; its numbers are evidence about how the shipped work was built.")
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.repo = pathlib.Path(self.temporary.name) / "Ward"
+        self.repo.mkdir()
+        self.tiers_path = pathlib.Path(self.temporary.name) / "TIERS.tsv"
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def inspect(self, readme, tier="SHIPPED", declaration=None, command=None):
+        declaration = declaration or (self.SHIPPED_LINE if tier == "SHIPPED" else self.RECORD_LINE)
+        (self.repo / "README.md").write_text(readme, encoding="utf-8")
+        ledger_row = "" if command is None else f"k\t5\t-\t{command}\tthing\n"
+        (self.repo / "MEASURED.tsv").write_text(
+            "KEY\tVALUE\tDENOMINATOR\tCOMMAND\tSUBJECT\n" + ledger_row, encoding="utf-8")
+        tiers = [claims.TierRow("Ward", tier, declaration, 2,
+                                f"Ward\t{tier}\t{declaration}")]
+        return claims.inspect_repository(self.repo, tiers, self.tiers_path)
+
+    @staticmethod
+    def tier_findings(report):
+        return [row.finding for row in report.rows if row.klass == "TIER"]
+
+    def test_tier_absent_fires_and_verbatim_line_is_silent(self):
+        self.assertIn("TIER-ABSENT", self.tier_findings(self.inspect("no declaration")))
+        self.assertNotIn("TIER-ABSENT", self.tier_findings(self.inspect(self.SHIPPED_LINE)))
+
+    def test_tier_paraphrase_is_still_absent(self):
+        report = self.inspect("Shipped, versioned, and live-session outcomes are unmeasured.")
+        self.assertIn("TIER-ABSENT", self.tier_findings(report))
+
+    def test_tier_undeclared_fires(self):
+        (self.repo / "README.md").write_text("text", encoding="utf-8")
+        (self.repo / "MEASURED.tsv").write_text(
+            "KEY\tVALUE\tDENOMINATOR\tCOMMAND\tSUBJECT\n", encoding="utf-8")
+        report = claims.inspect_repository(self.repo, [], self.tiers_path)
+        self.assertEqual(["TIER-UNDECLARED"], self.tier_findings(report))
+
+    def test_shipped_efficacy_literal_fires_and_is_silent(self):
+        missing = self.inspect("no efficacy declaration")
+        present = self.inspect("its effect on a live session's outcome is unmeasured")
+        self.assertIn("EFFICACY-UNDECLARED", self.tier_findings(missing))
+        self.assertNotIn("EFFICACY-UNDECLARED", self.tier_findings(present))
+
+    def test_record_does_not_owe_efficacy_literal(self):
+        self.assertNotIn("EFFICACY-UNDECLARED",
+                         self.tier_findings(self.inspect(self.RECORD_LINE, "RECORD")))
+
+    def test_foreign_evidence_fires_and_in_repo_command_is_silent(self):
+        foreign = self.inspect(self.SHIPPED_LINE, command="python3 ../Ward/eval.py")
+        local = self.inspect(self.SHIPPED_LINE, command="python3 eval/replay.py")
+        self.assertIn("FOREIGN-EVIDENCE", self.tier_findings(foreign))
+        self.assertNotIn("FOREIGN-EVIDENCE", self.tier_findings(local))
+
+    def test_record_install_fires_but_shipped_install_is_silent(self):
+        record = self.inspect(self.RECORD_LINE + "\nclaude plugin install thing", "RECORD")
+        shipped = self.inspect(self.SHIPPED_LINE + "\nclaude plugin install thing", "SHIPPED")
+        self.assertIn("RECORD-SELLS-INSTALL", self.tier_findings(record))
+        self.assertNotIn("RECORD-SELLS-INSTALL", self.tier_findings(shipped))
+
+    def test_tiers_parser_rejects_bad_file(self):
+        self.tiers_path.write_text("bad header\n", encoding="utf-8")
+        tiers, error = claims.read_tiers(self.tiers_path)
+        self.assertIsNone(tiers)
+        self.assertIsNotNone(error)
+
+    def test_unparseable_tiers_is_not_evaluable_with_no_tier_findings(self):
+        (self.repo / "README.md").write_text("text", encoding="utf-8")
+        with mock.patch.object(claims, "read_tiers", return_value=(None, "bad header")), \
+                mock.patch.object(claims, "build_parser") as parser:
+            parser.return_value.parse_args.return_value = type(
+                "Arguments", (), {"repo": self.repo, "estate": None, "claims_only": False})()
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(io.StringIO()):
+                status = claims.main([])
+        self.assertEqual(2, status)
+        self.assertNotIn("\tTIER\t", stdout.getvalue())
+
+    def test_tier_exit_contract_all_states(self):
+        passing = self.inspect(self.SHIPPED_LINE)
+        failing = self.inspect("missing")
+        unknown = claims.Report(results=[claims.CheckResult(claims.Outcome.NOT_EVALUABLE, "tiers")])
+        self.assertEqual([0, 1, 2],
+                         [claims.exit_code(report.results) for report in (passing, failing, unknown)])
 
 
 class CliTests(unittest.TestCase):

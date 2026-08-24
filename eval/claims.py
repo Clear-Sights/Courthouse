@@ -35,7 +35,9 @@ HEADER = ("CLASS", "SURFACE", "LINE", "KIND-OR-RULE", "NUMERATOR",
 EXCLUSION_RULES = ("generated-block", "source-fence", "footnote-definition", "url",
                    "date", "version", "identifier", "ordered-list-marker")
 FINDING_TYPES = ("UNANCHORED", "UNRESOLVED", "MISMATCH", "ORPHAN",
-                 "DUPLICATE-KEY", "EMPTY-COMMAND")
+                 "DUPLICATE-KEY", "EMPTY-COMMAND", "TIER-ABSENT",
+                 "TIER-UNDECLARED", "EFFICACY-UNDECLARED", "FOREIGN-EVIDENCE",
+                 "RECORD-SELLS-INSTALL")
 NUMBER = r"\d+(?:[.,]\d+)*%?"
 NUMBER_RE = re.compile(NUMBER)
 RATIO_RE = re.compile(rf"(?<![\w.-])({NUMBER})(?:\s*/\s*|\s+(?:of|out\s+of)\s+)({NUMBER})(?!\w)", re.I)
@@ -84,6 +86,15 @@ class LedgerRow:
     denominator: str
     command: str
     subject: str
+    line: int
+    text: str
+
+
+@dataclasses.dataclass
+class TierRow:
+    repo: str
+    tier: str
+    declaration: str
     line: int
     text: str
 
@@ -242,7 +253,52 @@ def read_ledger(path: pathlib.Path) -> tuple[list[LedgerRow] | None, str | None]
     return rows, None
 
 
-def inspect_repository(repository: pathlib.Path) -> Report:
+def read_tiers(path: pathlib.Path) -> tuple[list[TierRow] | None, str | None]:
+    if not path.exists():
+        return None, "file does not exist"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        return None, str(exc)
+    meaningful = [(number, line) for number, line in enumerate(lines, 1)
+                  if line.strip() and not line.lstrip().startswith("#")]
+    if not meaningful:
+        return None, "missing rows"
+    rows: list[TierRow] = []
+    seen: set[str] = set()
+    for line_number, line in meaningful:
+        try:
+            fields = next(csv.reader([line], delimiter="\t"))
+        except csv.Error as exc:
+            return None, f"line {line_number}: {exc}"
+        if (len(fields) != 3 or not fields[0] or fields[1] not in {"SHIPPED", "BENCH", "RECORD"}
+                or not fields[2]):
+            return None, f"line {line_number}: expected REPO, a valid TIER, and LINE"
+        key = fields[0].casefold()
+        if key in seen:
+            return None, f"line {line_number}: duplicate REPO"
+        seen.add(key)
+        rows.append(TierRow(*fields, line_number, line))
+    return rows, None
+
+
+def _tier_for(repository: pathlib.Path, tiers: list[TierRow]) -> TierRow | None:
+    # REPO names are matched case-insensitively because the checked-out directory names use
+    # lowercase for Ward and Makoto. Keel is the one declared checkout alias in TIERS.tsv.
+    names = {repository.name.casefold()}
+    if repository.name.casefold() == "gyroscope":
+        names.add("keel")
+    return next((row for row in tiers if row.repo.casefold() in names), None)
+
+
+def _tier_finding(report: Report, surface: str, line: int, tier: str,
+                  finding: str, text: str) -> None:
+    report.rows.append(Row("TIER", surface, line, tier, "-", finding=finding, text=text))
+    report.results.append(CheckResult(Outcome.FAIL, finding))
+
+
+def inspect_repository(repository: pathlib.Path, tiers: list[TierRow] | None = None,
+                       tiers_path: pathlib.Path | None = None) -> Report:
     report = Report()
     readme = repository / "README.md"
     surface = str(readme)
@@ -294,6 +350,30 @@ def inspect_repository(repository: pathlib.Path) -> Report:
             report.rows.append(Row("LEDGER", str(ledger_path), entry.line, "row", entry.value,
                                    entry.denominator, entry.key, finding, entry.text))
             report.results.append(CheckResult(Outcome.FAIL, finding))
+
+    if tiers is not None:
+        tier_path = tiers_path or pathlib.Path(__file__).with_name("TIERS.tsv")
+        declaration = _tier_for(repository, tiers)
+        if declaration is None:
+            _tier_finding(report, str(tier_path), 1, "-", "TIER-UNDECLARED",
+                          f"{repository.name}: no declaration")
+            return report
+        if declaration.declaration not in text:
+            _tier_finding(report, surface, 1, declaration.tier, "TIER-ABSENT",
+                          declaration.declaration)
+        if (declaration.tier == "SHIPPED" and
+                "its effect on a live session's outcome is unmeasured" not in text):
+            _tier_finding(report, surface, 1, declaration.tier, "EFFICACY-UNDECLARED",
+                          "its effect on a live session's outcome is unmeasured")
+        for entry in ledger:
+            if "../" in entry.command.replace("\\", "/"):
+                _tier_finding(report, surface, entry.line, declaration.tier, "FOREIGN-EVIDENCE",
+                              entry.command)
+        if declaration.tier == "RECORD":
+            for line_number, line in enumerate(text.splitlines(), 1):
+                if "claude plugin install" in line:
+                    _tier_finding(report, surface, line_number, declaration.tier,
+                                  "RECORD-SELLS-INSTALL", line)
     return report
 
 
@@ -315,9 +395,14 @@ def main(argv: list[str] | None = None) -> int:
         repositories = sorted((path for path in estate.iterdir() if path.is_dir() and
                                (path / ".git").exists()), key=lambda path: path.name.casefold())
 
+    tiers_path = pathlib.Path(__file__).with_name("TIERS.tsv")
+    tiers, tiers_error = read_tiers(tiers_path)
     combined = Report()
+    if tiers_error is not None:
+        combined.informational.append(f"NOT-EVALUABLE\t{tiers_path}: {tiers_error}")
+        combined.results.append(CheckResult(Outcome.NOT_EVALUABLE, str(tiers_path)))
     for repository in repositories:
-        report = inspect_repository(repository)
+        report = inspect_repository(repository, tiers, tiers_path)
         combined.rows.extend(report.rows)
         combined.results.extend(report.results)
         combined.informational.extend(report.informational)
