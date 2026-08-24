@@ -47,6 +47,7 @@ class Plant:
     expected_finding: str | None = None
     expected_surface: str | None = None
     expected_status: int | None = None
+    verify_evidence: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -153,6 +154,10 @@ PLANTS = (
           POLARITY_SILENT, "EFFICACY-UNDECLARED", "Ward/README.md"),
     Plant("unparseable-ledger", _replace("courthouse/MEASURED.tsv", "KEY\tVALUE", "BROKEN\tVALUE"),
           POLARITY_SILENT, expected_status=2),
+    Plant("ledger-unverified",
+          _replace("courthouse/MEASURED.tsv", "plugin-count\t3\t", "plugin-count\t4\t"),
+          POLARITY_FIRES, "LEDGER-UNVERIFIED", "courthouse/MEASURED.tsv",
+          verify_evidence=True),
 )
 
 
@@ -180,11 +185,16 @@ def seed_estate(estate: pathlib.Path) -> None:
     (repository / ".git").mkdir()
     shutil.copyfile(ROOT / "README.md", repository / "README.md")
     shutil.copyfile(ROOT / "MEASURED.tsv", repository / "MEASURED.tsv")
+    plugin_dir = repository / ".claude-plugin"
+    plugin_dir.mkdir()
+    shutil.copyfile(ROOT / ".claude-plugin/marketplace.json", plugin_dir / "marketplace.json")
 
 
-def run_engine(estate: pathlib.Path) -> EngineRun:
+def run_engine(estate: pathlib.Path, verify_evidence: bool = False) -> EngineRun:
+    arguments = (["--repo", str(estate / "courthouse"), "--verify-evidence"]
+                 if verify_evidence else ["--estate", str(estate)])
     completed = subprocess.run(
-        [sys.executable, str(CLAIMS), "--estate", str(estate)], text=True,
+        [sys.executable, str(CLAIMS), *arguments], text=True,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     findings: set[tuple[str, str, str]] = set()
     lines = completed.stdout.splitlines()
@@ -206,17 +216,18 @@ def _surface(estate: pathlib.Path, declared: str | None) -> str | None:
     return str(path if path.is_absolute() else estate / path)
 
 
-def exercise(plant: Plant, engine: Callable[[pathlib.Path], EngineRun] = run_engine) -> PlantResult:
+def exercise(plant: Plant,
+             engine: Callable[[pathlib.Path, bool], EngineRun] = run_engine) -> PlantResult:
     with tempfile.TemporaryDirectory(prefix="courthouse-calibrate-") as temporary:
         estate = pathlib.Path(temporary)
         seed_estate(estate)
         try:
-            baseline = engine(estate)
+            baseline = engine(estate, plant.verify_evidence)
             if baseline.status not in (0, 1, 2):
                 return PlantResult(plant, Outcome.NOT_EVALUABLE, False, False,
                                    f"baseline engine exited {baseline.status}")
             revert = plant.mutate(estate)
-            planted = engine(estate)
+            planted = engine(estate, plant.verify_evidence)
             expected_surface = _surface(estate, plant.expected_surface)
             matching = {row for row in planted.findings - baseline.findings
                         if row[0] == plant.expected_finding and row[1] == expected_surface}
@@ -228,7 +239,7 @@ def exercise(plant: Plant, engine: Callable[[pathlib.Path], EngineRun] = run_eng
                 observed = not any(row[0] == plant.expected_finding and
                                    row[1] == expected_surface for row in planted.findings)
             revert()
-            restored_run = engine(estate)
+            restored_run = engine(estate, plant.verify_evidence)
             restored = (restored_run.status == baseline.status and
                         restored_run.findings == baseline.findings)
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
@@ -243,7 +254,7 @@ def exercise(plant: Plant, engine: Callable[[pathlib.Path], EngineRun] = run_eng
 
 
 def run_battery(plants: Sequence[Plant] = PLANTS,
-                engine: Callable[[pathlib.Path], EngineRun] = run_engine,
+                engine: Callable[[pathlib.Path, bool], EngineRun] = run_engine,
                 residues: Sequence[Residue] = RESIDUE) -> tuple[int, list[PlantResult]]:
     results = [exercise(plant, engine) for plant in plants]
     checks = [CheckResult(result.outcome, result.plant.id) for result in results]

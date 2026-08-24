@@ -47,7 +47,7 @@ jobs:
         #
         # Only --repo . -- the estate scan needs the sibling checkouts, which CI does not have,
         # and a check that cannot see its subject must not pretend to rule on it.
-        run: python3 eval/claims.py --repo . --claims-only
+        run: python3 eval/claims.py --repo . --claims-only --verify-evidence
       - name: Every check has been seen failing on a planted fault
         # The engine emits eleven finding types; eight of them had never once been observed
         # firing against a real repository -- only against fixtures. A fixture proves the code
