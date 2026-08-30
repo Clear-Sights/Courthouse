@@ -48,6 +48,10 @@ jobs:
         # Only --repo . -- the estate scan needs the sibling checkouts, which CI does not have,
         # and a check that cannot see its subject must not pretend to rule on it.
         run: python3 eval/claims.py --repo . --claims-only --verify-evidence
+      - name: Demo mode plants each defect and requires it to be caught
+        # Drives hooks/dispatch.sh as a subprocess over a scratch state directory, so the
+        # shipped hook edge is graded, not only the reader behind it.
+        run: python3 plugin/courthouse/demo.py --self-test
       - name: Every check has been seen failing on a planted fault
         # The engine emits eleven finding types; eight of them had never once been observed
         # firing against a real repository -- only against fixtures. A fixture proves the code

@@ -1,0 +1,10 @@
+{
+  "name": "courthouse-demo",
+  "description": "Demo mode for the bench: switch it on and see what Ward, Keel and Makoto are actually DOING — every deny, block and fault the judges produce, read from the records they already write. The bench's own tooling, not a fourth judge: it rules on nothing and changes no verdict.",
+  "version": "0.1.0",
+  "author": {"name": "Clear-Sights"},
+  "homepage": "https://github.com/Clear-Sights/Courthouse",
+  "repository": "https://github.com/Clear-Sights/Courthouse",
+  "license": "Apache-2.0",
+  "keywords": ["claude-code", "hooks", "observability", "demo", "courthouse"]
+}

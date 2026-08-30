@@ -77,6 +77,38 @@ hook stderr on a successful exit reaches the debug log and nobody else.
 That document also carries the **check-ownership table**: one check, one owner, and the sibling
 that does not own it does not implement it.
 
+## Demo mode: see what the bench is doing
+
+The judges run as hooks inside the process they constrain, so when they work you see nothing —
+a hook that allows a call is indistinguishable from a hook that was never installed. That is
+fine for a guard and bad for a storefront: what is worth seeing — that the bench is live,
+and what it caught — is exactly what the host never shows.
+
+Demo mode is that window, and it is a **mode**, not a scripted tour. Switch it on and keep
+working; every time a judge actually fires, you see it.
+
+```console
+$ /demo on
+$ /demo            # what the bench has been doing
+```
+
+Only what came back **positive** appears — a deny, a Stop-time block, a fault. Checks that
+passed are deliberately absent: Ward and Keel both refuse to log allowed calls, having each measured that
+policy and found it overwhelmingly noise (the figure is published in their own READMEs, which
+own it), and a window narrating every allowed call is one nobody watches long enough to see a
+real deny. Nothing is simulated. It reads `decisions.jsonl`, the
+plugin-attributed record each engine already writes for its own reasons, so what it prints is
+what happened.
+
+**Makoto is reported `NOT OBSERVABLE`, never as clean.** It writes no such journal: its record
+proves it *saw* an event but carries no verdict, so whether it blocked anything cannot be
+established from its own state. Absence of a record is not a record of absence — the same law
+the sibling journals were built to satisfy. Closing that gap belongs in Makoto, not here.
+
+Demo mode is the bench's own tooling and **not a fourth judge**: it rules on nothing, denies
+nothing, and cannot change a verdict. The partition argued above is unaffected — it observes
+the judges, it does not join them.
+
 ## Evidence
 
 Each engine ships a corpus-replay eval you can run from its repository root
