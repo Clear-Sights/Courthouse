@@ -95,14 +95,22 @@ $ /demo on
 $ /demo            # what the bench has been doing
 ```
 
-Only what came back **positive** appears — a deny, a Stop-time block, a fault. Checks that
+Only what came back **positive** appears — a deny, a Stop-time block, a fault, or an
+obligation Keel raised. Checks that
 passed are deliberately absent: Ward and Keel both refuse to log allowed calls, having each measured that
 policy and found it overwhelmingly noise (the figure is published in their own READMEs, which
 own it), and a window narrating every allowed call is one nobody watches long enough to see a
 real deny. Nothing is simulated: it reads the records the engines already write for their own
 reasons, so what it prints is what happened.
 
-All three engines[^m-judge-count] are read the same way. Ward and Keel write `decisions.jsonl`; Makoto writes
+The engines are read through every record each one writes, which is not the same number of
+records for each. Ward writes `decisions.jsonl`. Keel writes that **and** `obligations.jsonl`,
+because Keel is a keel: half its job is refusing an act, and the other half is demanding one, and
+only the first half lands in `decisions.jsonl`. Reading the refusals alone reported an engine that
+had raised obligations and denied nothing as *"ran, nothing fired"* — silence printed as a fact
+about an engine that had been working. Demands are counted in their own lane, never folded into
+the refusal count: an obligation still open and one already discharged are different states, and
+one number moving for both would hide the distinction the ledger exists to keep. Makoto writes
 `audit.jsonl`, one row per finding-producing dispatch carrying which checks fired, the exit code,
 and the findings themselves — so it names the rule *and* the ruling where the siblings name the
 denial alone. All three log only what fired, each having measured that recording silent passes
