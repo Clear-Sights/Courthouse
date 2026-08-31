@@ -1,0 +1,78 @@
+name: Manual Release
+
+# The tag this repository's own validator demands. `eval/validate.py` requires every marketplace
+# entry to name a ref that RESOLVES ON THE REMOTE to the sha pinned beside it, so a plugin cannot
+# be listed until a real tag exists -- measured, not assumed: adding the entry first fails with
+# `courthouse-demo: v0.1.0 on remote resolves to pinned sha (got None)`.
+#
+# The tag is cut HERE rather than pushed from a workstation for the same reason the version is
+# read rather than typed: the runner holds the write credential, and the gates below stand
+# between a commit and a tag pointing at it. A tag is what users install from; it may not name a
+# commit whose gates were never run.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # READ, never typed. A hand-entered version is how a tag and the number a user actually
+      # installs come from two places with nothing comparing them.
+      - name: Derive the version from the plugin manifest
+        id: version
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('plugin/.claude-plugin/plugin.json'))['version'])")
+          if [ -z "$VERSION" ]; then
+            echo "plugin.json declares no version" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "releasing v$VERSION"
+
+      # A tag that skips the gates is a tag nobody checked. These are ci.yml's steps, run again
+      # against the exact commit about to be tagged -- ci.yml graded a push, not this decision.
+      - name: Run the gates that ci.yml runs
+        run: |
+          set +e
+          python3 -m unittest discover -s eval -v 2>&1 | tee /tmp/unittest.log
+          status=${PIPESTATUS[0]}
+          set -e
+          ran=$(sed -n 's/^Ran \([0-9][0-9]*\) test.*/\1/p' /tmp/unittest.log | tail -1)
+          if [ "$status" -ne 0 ]; then
+            echo "Unit tests failed with status $status." >&2
+            exit "$status"
+          fi
+          # `unittest discover` exits 0 having collected NOTHING, so the count is the check.
+          if [ -z "$ran" ] || [ "$ran" -eq 0 ]; then
+            echo "No tests were collected; finding nothing is not finding nothing wrong." >&2
+            exit 1
+          fi
+          echo "Unit tests passed: $ran tests ran."
+          python3 eval/validate.py
+          python3 eval/claims.py --repo . --claims-only --verify-evidence
+          python3 plugin/courthouse/demo.py --self-test
+          python3 eval/calibrate.py
+
+      # REFUSE TO MOVE AN EXISTING TAG. A tag that silently re-points is how an installed version
+      # stops meaning one set of bytes; the pinned sha in marketplace.json would still resolve,
+      # and would resolve to something else than it did.
+      - name: Create the tag
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists and this workflow will not move it." >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "courthouse-demo $VERSION"
+          git push origin "$TAG"
+          echo "tagged $TAG at $(git rev-parse "$TAG"^{commit})"
