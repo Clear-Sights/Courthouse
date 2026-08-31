@@ -2,7 +2,7 @@
 
 The bench: a plugin marketplace. It states only the facts it owns and links the rest.
 
-**One bench, three judges.[^m-plugin-count]** Courthouse is the plugin marketplace for the three
+**One bench, three judges.[^m-judge-count]** Courthouse is the plugin marketplace for the three
 Clear-Sights guard engines. They split one taxonomy — **act, sequence,
 statement** — and share nothing else: each installs alone, each is a pure
 `stdlib` Python hook, and none inherits or implies the others' coverage.
@@ -43,25 +43,28 @@ $ claude plugin install keel@courthouse
 $ claude plugin install makoto@courthouse
 ```
 
-Install any subset — the three verdicts[^m-plugin-count] are independent.
+Install any subset — the three verdicts[^m-judge-count] are independent.
+
+The manifest lists four entries[^m-plugin-count]: the judges above, plus demo mode, which is
+bench tooling and rules on nothing.
 
 ## The shared trust boundary
 
-All three engines[^m-plugin-count] run inside the boundary of the very process they constrain: each is a hook fed
+All three engines[^m-judge-count] run inside the boundary of the very process they constrain: each is a hook fed
 by the agent's own event stream, and intent is unobservable from outside that boundary, so they
 judge only what crosses it — acts, sequences, and statements. A policy whose behavior stays inside
 the check surface passes, whoever or whatever drives it. They constrain capability, not intent.
 
-Why three engines[^m-plugin-count] and not four: act/sequence/statement is a partition of what an external judge
+Why three engines[^m-judge-count] and not four: act/sequence/statement is a partition of what an external judge
 can observe, not a growing feature list. From outside the process there is nothing else to rule
 on — a single pending event is an act, an ordering of events is a sequence, and text emitted about
-them is a statement — so a candidate fourth engine would either judge one of those three surfaces[^m-plugin-count]
+them is a statement — so a candidate fourth engine would either judge one of those three surfaces[^m-judge-count]
 (and belong to an existing bench seat) or claim to judge intent, which no observer at this
-boundary can see. Three judges[^m-plugin-count] exhaust the observable.
+boundary can see. Three judges[^m-judge-count] exhaust the observable.
 
 ## When a judge's own machinery breaks
 
-Three plugins[^m-plugin-count] share one hook edge, so "what happens when a check cannot run?" is a bench-wide
+The three judges[^m-judge-count] share one hook edge, so "what happens when a check cannot run?" is a bench-wide
 question, not three private ones — and it was answered three different ways until one input made
 all three answer at once. A single non-UTF-8 byte in a hook payload got Makoto to allow the call
 unchecked, Ward to deny a benign file citing a parse failure that was not real, and the sequence
@@ -134,4 +137,5 @@ The marketplace manifest in this repository is Apache-2.0 — see
 [LICENSE](LICENSE). Each engine is licensed in its own repository
 (all three Apache-2.0).
 
-[^m-plugin-count]: The marketplace manifest's plugin entries, counted by `python3 -c 'import json; print(len(json.load(open(".claude-plugin/marketplace.json"))["plugins"]))'`.
+[^m-judge-count]: The judges on the bench — marketplace entries that rule on something, counted by `python3 -c 'import json; print(sum(1 for p in json.load(open(".claude-plugin/marketplace.json"))["plugins"] if "bench-tooling" not in (p.get("tags") or [])))'`. Bench tooling is tagged out by name, so adding a tool cannot quietly restate this number as a claim about judges.
+[^m-plugin-count]: Every entry in the marketplace manifest, judges and bench tooling alike, counted by `python3 -c 'import json; print(len(json.load(open(".claude-plugin/marketplace.json"))["plugins"]))'`.

@@ -58,7 +58,7 @@
         "ref": "v2.4.0",
         "sha": "a313a34544428de6bf04fbee48935add1396f591"
       },
-      "description": "Judges the statement: holds Claude Code to its word — every claim checked against the agent's own logged record; faked checks blocked, not warned (four narrow advisory self-checks excepted). Two-tier catalog (15 pre-checks, 19 Stop gates); blocking checks certified at zero false positives on the shipped corpus and gold negative sets — per-gate certification basis in the Makoto README.",
+      "description": "Judges the statement: holds Claude Code to its word \u2014 every claim checked against the agent's own logged record; faked checks blocked, not warned (four narrow advisory self-checks excepted). Two-tier catalog (15 pre-checks, 19 Stop gates); blocking checks certified at zero false positives on the shipped corpus and gold negative sets \u2014 per-gate certification basis in the Makoto README.",
       "category": "workflow",
       "tags": [
         "integrity",
@@ -69,6 +69,26 @@
       "license": "Apache-2.0",
       "homepage": "https://github.com/Clear-Sights/Makoto",
       "version": "2.4.0"
+    },
+    {
+      "name": "courthouse-demo",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/Clear-Sights/Courthouse.git",
+        "path": "plugin",
+        "ref": "v0.1.0",
+        "sha": "4105e306ce5ce578b3fc53ff07a287a985dfacdc"
+      },
+      "description": "Bench tooling, not a judge: switch demo mode on and see what Ward, Keel and Makoto are actually DOING -- every deny, block and fault, read from the records they already write. It rules on nothing and changes no verdict.",
+      "category": "workflow",
+      "tags": [
+        "observability",
+        "demo",
+        "bench-tooling"
+      ],
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/Clear-Sights/Courthouse",
+      "version": "0.1.0"
     }
   ]
 }
