@@ -99,14 +99,15 @@ Only what came back **positive** appears — a deny, a Stop-time block, a fault.
 passed are deliberately absent: Ward and Keel both refuse to log allowed calls, having each measured that
 policy and found it overwhelmingly noise (the figure is published in their own READMEs, which
 own it), and a window narrating every allowed call is one nobody watches long enough to see a
-real deny. Nothing is simulated. It reads `decisions.jsonl`, the
-plugin-attributed record each engine already writes for its own reasons, so what it prints is
-what happened.
+real deny. Nothing is simulated: it reads the records the engines already write for their own
+reasons, so what it prints is what happened.
 
-**Makoto is reported `NOT OBSERVABLE`, never as clean.** It writes no such journal: its record
-proves it *saw* an event but carries no verdict, so whether it blocked anything cannot be
-established from its own state. Absence of a record is not a record of absence — the same law
-the sibling journals were built to satisfy. Closing that gap belongs in Makoto, not here.
+All three engines[^m-judge-count] are read the same way. Ward and Keel write `decisions.jsonl`; Makoto writes
+`audit.jsonl`, one row per finding-producing dispatch carrying which checks fired, the exit code,
+and the findings themselves — so it names the rule *and* the ruling where the siblings name the
+denial alone. All three log only what fired, each having measured that recording silent passes
+floods the log to overwhelming noise, so an empty log means nothing fired rather than nothing
+was watched.
 
 Demo mode is the bench's own tooling and **not a fourth judge**: it rules on nothing, denies
 nothing, and cannot change a verdict. The partition argued above is unaffected — it observes

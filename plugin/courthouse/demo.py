@@ -156,26 +156,75 @@ def read_journal(plugin: str, root: pathlib.Path) -> tuple[list[Activity], bool,
 
 
 def read_makoto(root: pathlib.Path) -> tuple[list[Activity], bool, str | None]:
-    """Makoto's liveness only, and an explicit refusal to speak about its verdicts.
+    """(what Makoto did, whether it proved it ran, why it could not be read).
 
-    Its `events` table records that an event was SEEN. No column carries the ruling, so a query
-    over it can establish that Makoto ran and cannot establish that it allowed anything. Returning
-    an empty activity list with `unobservable` set is the honest shape: the caller must not be
-    able to mistake this for a clean bill.
+    CORRECTION. This function previously returned an empty activity list and the note "makoto
+    records events seen, not verdicts reached ... NOT OBSERVABLE", having consulted only the
+    `events` table of makoto.record.db. That was wrong, and wrong in this repository's own worst
+    way: it reported a verdict about a subject it had never read.
+
+    Makoto writes `makoto_state/audit.jsonl`, one chain-appended row per Finding-producing
+    dispatch, carrying `pattern_fires` (which checks fired), `exit_code` (2 blocking, 0 not) and
+    the full findings. Driven for real -- one corpus session through `python -m makoto.dispatch`
+    -- it produced exactly one row:
+
+        {"event": "live.pre_tool_use", "pattern_fires": ["content.verifier_exit_masking"],
+         "exit_code": 2, "tool_name": "Bash"}
+
+    That is a verdict journal, and a richer one than the siblings': it names the rule AND the
+    exit code, where `decisions.jsonl` gives the denial alone. It follows the same only-fires
+    policy for the same measured reason (recording silent fires flooded the log to 99%+ noise),
+    so an ABSENT file means nothing fired -- exactly as an empty `decisions.jsonl` does. It is
+    not evidence of blindness, which is what the old note mistook it for.
+
+    Liveness therefore still comes from the record db, which is written on every event: the
+    audit log alone cannot distinguish "ran and stayed silent" from "never ran".
     """
-    path = root / "makoto_state" / "makoto.record.db"
-    if not path.is_file():
-        return [], False, f"no record at {path}"
-    try:
-        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    record = root / "makoto_state" / "makoto.record.db"
+    live = False
+    if record.is_file():
         try:
-            seen = connection.execute("select count(*) from events").fetchone()[0]
-        finally:
-            connection.close()
-    except sqlite3.Error as exc:
-        return [], False, f"unreadable record at {path}: {exc}"
-    return [], bool(seen), ("makoto records events seen, not verdicts reached: whether it "
-                            "blocked anything is NOT OBSERVABLE from its own state")
+            connection = sqlite3.connect(f"file:{record}?mode=ro", uri=True)
+            try:
+                live = bool(connection.execute("select count(*) from events").fetchone()[0])
+            finally:
+                connection.close()
+        except sqlite3.Error:
+            live = False
+
+    rows, unreadable = _journal_rows(root / "makoto_state" / "audit.jsonl")
+    if unreadable and not record.is_file():
+        return [], False, unreadable
+
+    acted = []
+    for row in rows:
+        findings = row.get("findings")
+        findings = findings if isinstance(findings, list) else []
+        fires = row.get("pattern_fires")
+        fires = [str(f) for f in fires] if isinstance(fires, list) else []
+        # exit_code 2 is Makoto blocking; a finding that did not block is still something it
+        # DID, and is reported as a fault rather than folded into the silent majority.
+        kind = "block" if row.get("exit_code") == 2 else "fault"
+        acted.append(Activity(
+            plugin="makoto",
+            kind=kind,
+            ts=str(row.get("ts") or ""),
+            session_id=str(row.get("session_id") or ""),
+            tool_name=str(row.get("tool_name") or ""),
+            subject=_describe_makoto(findings, fires),
+        ))
+    return acted, live or bool(rows), None
+
+
+def _describe_makoto(findings: list, fires: list) -> str:
+    """Makoto's own words for what it caught, never a sentence invented here."""
+    for finding in findings:
+        if isinstance(finding, dict):
+            message = finding.get("message")
+            if isinstance(message, str) and message.strip():
+                return " ".join(message.split())
+    return ", ".join(fires) if fires else "a finding with no message"
+
 
 
 ENGINES = ("ward", "keel", "makoto")
@@ -383,11 +432,43 @@ def self_test() -> int:
         connection.commit()
         connection.close()
         acted, live, note = read_makoto(root)
-        check("makoto proves liveness but is explicitly NOT OBSERVABLE for verdicts",
-              live and acted == [] and note is not None and "NOT OBSERVABLE" in note.upper(),
-              f"live={live} note={note}")
-        check("and the bench render says so rather than calling it clean",
-              "NOT OBSERVABLE" in render(survey(root)))
+        # NON-VACUITY: the record alone proves it RAN. Liveness must not depend on a finding,
+        # or "ran and stayed silent" would be indistinguishable from "never ran".
+        check("makoto proves liveness from its record with no finding present",
+              live and acted == [] and note is None, f"live={live} acted={acted} note={note}")
+
+        # PLANT a real audit row, in the shape the dispatcher actually writes. This cell exists
+        # because the previous version of this file reported makoto NOT OBSERVABLE without ever
+        # reading audit.jsonl -- a verdict about a subject it had not consulted, which is the
+        # defect this whole bench is built to catch.
+        (makoto / "audit.jsonl").write_text(json.dumps({
+            "ts": "2026-08-31T04:36:00Z", "event": "live.pre_tool_use", "hook_kind": "PreToolUse",
+            "session_id": "em", "tool_name": "Bash", "exit_code": 2,
+            "pattern_fires": ["content.verifier_exit_masking"],
+            "findings": [{"pattern_id": "content.verifier_exit_masking", "level": "error",
+                          "message": "verifier exit-code masking (|| true)"}],
+        }) + "\n", encoding="utf-8")
+        acted, live, note = read_makoto(root)
+        check("PLANT a makoto block is read from audit.jsonl and named",
+              len(acted) == 1 and acted[0].kind == "block"
+              and "exit-code masking" in acted[0].subject,
+              f"acted={acted}")
+        check("and it reaches the rendered page in makoto's own words",
+              "exit-code masking" in render(survey(root)))
+        # A finding that did NOT block is still something makoto did, and is not folded into
+        # the silent majority.
+        (makoto / "audit.jsonl").write_text(json.dumps({
+            "ts": "2026-08-31T04:37:00Z", "event": "live.stop", "hook_kind": "Stop",
+            "session_id": "em", "tool_name": "", "exit_code": 0,
+            "pattern_fires": ["content.hollow_test"],
+            "findings": [{"pattern_id": "content.hollow_test", "level": "warn",
+                          "message": "a test that asserts nothing"}],
+        }) + "\n", encoding="utf-8")
+        check("a non-blocking makoto finding is reported as a fault, not as silence",
+              [a.kind for a in read_makoto(root)[0]] == ["fault"])
+        (makoto / "audit.jsonl").unlink()
+        check("and an absent audit log is silence, not blindness -- the only-fires policy",
+              read_makoto(root) == ([], True, None) or read_makoto(root)[1])
 
         # THE MODE TOGGLES, AND THE TOGGLE IS WHAT THE REPORT READS.
         check("mode is off until switched on", not mode_is_on(root))
