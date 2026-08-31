@@ -155,6 +155,105 @@ def read_journal(plugin: str, root: pathlib.Path) -> tuple[list[Activity], bool,
     return acted, live, None
 
 
+LEDGER_FILE = "obligations.jsonl"
+
+
+def _describe_demand(row: dict) -> str:
+    """Keel's own words for what it demanded, never a sentence invented here."""
+    # The field names are Keel's, read from its `Demand` dataclass (`keel/ledger.py:131-137`:
+    # id, session, agent, clause_id, subject, reason), not guessed from this side. A demand row
+    # carries NO timestamp -- `_append` adds only `prev` and `hash` -- so `Activity.ts` is empty
+    # for a demand, which is a measured absence rather than a field this reader failed to find.
+    for key in ("reason", "subject", "clause_id"):
+        value = row.get(key)
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.split())
+    return str(row.get("id") or "a demand with no subject")
+
+
+def read_ledger(root: pathlib.Path) -> tuple[list[Activity], dict, str | None]:
+    """Keel's POSITIVE half: what it demanded, what was discharged, what is still open.
+
+    WHY THIS EXISTS. This module read `decisions.jsonl` and nothing else, and `POSITIVE_KINDS`
+    names only refusals -- deny, block, fault. But Keel is a keel: half its job is ensuring the
+    good outcome arrives, and that half writes `obligations.jsonl`, never `decisions.jsonl`. So a
+    Keel that raised fifty demands and denied nothing reported `acted: []`, `observable: true`,
+    `verdict: PASS` -- "Keel did nothing" printed as a fact about an engine that had been working
+    the whole time. This file states the governing law in its own header ("absence of a record is
+    not a record of absence") and then broke it for the same engine, one file over.
+
+    OPENNESS IS SCOPED, and mirroring that is the whole correctness of this function. Keel
+    computes open demands PER (session, agent) -- `keel/ledger.py:250-256` skips every row whose
+    session or agent differs before subtracting discharges. Computing it globally would let a
+    discharge in one session close a demand raised in another, which is the same act reported as
+    resolved by evidence from a different run.
+
+    TWO SPELLINGS OF ONE RULE, ACKNOWLEDGED. Keel owns this rule; the honest fix would be to call
+    `Ledger.open_ids`, but Courthouse is a separate plugin that cannot import a sibling it does not
+    ship. So this is a re-derivation across a trust boundary, and it is pinned rather than trusted:
+    the self-test plants rows in the exact shape `keel/ledger.py` appends (`kind` demand/discharge,
+    scoped by `session` and `agent`, identified by `id`) and asserts the split, including the
+    cross-scope case. If Keel changes the shape, that cell fails rather than this reader silently
+    reporting a wrong number.
+
+    ABSENCE IS SILENCE, NOT BLINDNESS. The ledger is written only when a demand is raised -- the
+    same only-fires policy `audit.jsonl` follows -- so a MISSING file means nothing was demanded
+    and carries no note. Only a file that exists and cannot be READ is a stated reason.
+    """
+    path = root / "keel_state" / LEDGER_FILE
+    # ABSENT and UNREADABLE are different answers and must not share a branch. `is_file()` is
+    # false for BOTH a missing journal and a directory sitting where the journal belongs, so
+    # testing it alone reported a broken state as "nothing was ever demanded" -- absence
+    # manufactured out of a fault, which is the exact defect this lane was added to remove.
+    # Caught by the cell below, not by reading this back.
+    if not path.exists():
+        return [], {"demanded": 0, "discharged": 0, "open": 0, "balanced": True}, None
+    if not path.is_file():
+        return [], {}, f"ledger path is not a readable file: {path}"
+    rows, unreadable = _journal_rows(path)
+    if unreadable:
+        return [], {}, unreadable
+
+    scopes: dict[tuple, tuple[set, set]] = {}
+    demand_rows: dict[tuple, dict] = {}
+    for row in rows:
+        kind, rid = row.get("kind"), row.get("id")
+        if rid is None or kind not in ("demand", "discharge"):
+            continue
+        scope = (row.get("session"), row.get("agent"))
+        opened, closed = scopes.setdefault(scope, (set(), set()))
+        if kind == "demand":
+            opened.add(rid)
+            demand_rows.setdefault((scope, rid), row)  # first row per id wins, as Keel does
+        else:
+            closed.add(rid)
+
+    open_keys, discharged = [], 0
+    for scope, (opened, closed) in scopes.items():
+        for rid in opened - closed:
+            open_keys.append((scope, rid))
+        discharged += len(opened & closed)   # a discharge with no demand closes nothing
+    demanded = sum(len(opened) for opened, _ in scopes.values())
+
+    acted = [
+        Activity(
+            plugin="keel",
+            kind="demand",
+            ts=str(demand_rows[key].get("ts") or ""),
+            session_id=str(demand_rows[key].get("session") or ""),
+            tool_name=str(demand_rows[key].get("agent") or ""),
+            subject=_describe_demand(demand_rows[key]),
+        )
+        for key in open_keys if key in demand_rows
+    ]
+    # CONSERVATION, asserted where it is computed rather than trusted downstream: every demand is
+    # either still open or was discharged in its own scope. A count that does not sum is the
+    # denominator defect this bench exists to catch, so it is reported, never silently balanced.
+    counts = {"demanded": demanded, "discharged": discharged, "open": len(open_keys)}
+    counts["balanced"] = demanded == discharged + len(open_keys)
+    return acted, counts, None
+
+
 def read_makoto(root: pathlib.Path) -> tuple[list[Activity], bool, str | None]:
     """(what Makoto did, whether it proved it ran, why it could not be read).
 
@@ -230,6 +329,31 @@ def _describe_makoto(findings: list, fires: list) -> str:
 ENGINES = ("ward", "keel", "makoto")
 
 
+def engine_activity(name: str, root: pathlib.Path) -> tuple[list[Activity], bool, str | None, dict]:
+    """The ONE place that answers "what did this engine do". Called by `survey` and by `unseen`.
+
+    Those two used to each assemble it themselves, which was survivable only while every engine
+    had exactly one record. The moment Keel gained a second, a demand counted by the page would
+    have been invisible to the cursor -- the mode would print an obligation once and then, on the
+    next look, offer it again as fresh, because the two readers disagreed about what had been
+    shown. One question, one answer, one function.
+    """
+    if name == "makoto":
+        acted, live, note = read_makoto(root)
+        return acted, live, note, {}
+    acted, live, note = read_journal(name, root)
+    ledger: dict = {}
+    if name == "keel":
+        # KEEL'S SECOND RECORD. Its positive half writes `obligations.jsonl`, never
+        # `decisions.jsonl`, and each record is separately evaluable: an unreadable ledger beside
+        # a readable decisions file is NOT a clean engine. Folding both into one note would
+        # recreate, one level up, the single-record blindness this lane exists to remove.
+        demands, ledger, ledger_note = read_ledger(root)
+        acted = acted + demands
+        note = "; ".join(n for n in (note, ledger_note) if n) or None
+    return acted, live, note, ledger
+
+
 def survey(root: pathlib.Path | None = None) -> dict:
     """What every judge on the bench has done, with each engine's observability stated.
 
@@ -240,10 +364,7 @@ def survey(root: pathlib.Path | None = None) -> dict:
     root = root or state_root()
     engines, findings, not_evaluable = {}, [], 0
     for name in ENGINES:
-        if name == "makoto":
-            acted, live, note = read_makoto(root)
-        else:
-            acted, live, note = read_journal(name, root)
+        acted, live, note, ledger = engine_activity(name, root)
         # An engine is observable when its record could be read AND that record carries verdicts.
         # Makoto is live-but-verdictless, so it fails the second test while passing the first;
         # counting it as `passed` because it ran is how a denominator comes to disagree with the
@@ -256,10 +377,18 @@ def survey(root: pathlib.Path | None = None) -> dict:
             "acted": [dataclasses.asdict(a) for a in acted],
             "observable": not blind,
             "note": note,
+            "ledger": ledger,
         }
         if blind:
             findings.append({"kind": "unobservable", "subject": name, "detail": note})
-    total = sum(len(engine["acted"]) for engine in engines.values())
+    # `fired` KEEPS ITS MEANING: refusals only. An open obligation and a discharged one are
+    # different states, and a demand is not a denial -- folding them into one total would make a
+    # single number move for two causes needing opposite responses, so the lane is reported
+    # beside it and never inside it.
+    total = sum(
+        sum(1 for row in engine["acted"] if row["kind"] in POSITIVE_KINDS)
+        for engine in engines.values()
+    )
     return {
         "tool": "courthouse-demo", "subject": str(root),
         "verdict": "NOT-EVALUABLE" if not_evaluable else "PASS",
@@ -289,9 +418,18 @@ def engine_state(engine: dict) -> str:
         return UNOBSERVABLE
     if not engine["live"]:
         return "no session row: not seen running"
-    if engine["acted"]:
-        return f"{len(engine['acted'])} fired"
-    return "ran, nothing fired"
+    # REFUSALS AND DEMANDS ARE COUNTED APART. `acted` now carries both, and "3 fired" for an
+    # engine that denied nothing and demanded three times would be the one-number conflation this
+    # lane was added to remove -- a phrase moving for two causes that need opposite responses.
+    fired = sum(1 for row in engine["acted"] if row["kind"] in POSITIVE_KINDS)
+    ledger = engine.get("ledger") or {}
+    parts = [f"{fired} fired"] if fired else []
+    if ledger.get("demanded"):
+        parts.append(f"{ledger['demanded']} demanded, {ledger['discharged']} discharged, "
+                     f"{ledger['open']} open")
+    if not parts:
+        return "ran, nothing fired"
+    return "; ".join(parts)
 
 
 def render(report: dict) -> str:
@@ -305,9 +443,13 @@ def render(report: dict) -> str:
             lines.append(f"         ^ {engine['note']}")
         for row in acted[-5:]:
             lines.append("         " + Activity(**row).line()[:160])
+    ledger = report["engines"]["keel"].get("ledger") or {}
     lines += ["", f"DENOMINATOR subject=bench engines={report['evaluated']} "
                   f"observable={report['passed']} not-observable={report['not_evaluable']} "
-                  f"fired={report['fired']}"]
+                  f"fired={report['fired']} "
+                  f"demanded={ledger.get('demanded', 0)} "
+                  f"discharged={ledger.get('discharged', 0)} "
+                  f"open={ledger.get('open', 0)}"]
     return "\n".join(lines)
 
 
@@ -337,7 +479,7 @@ def unseen(root: pathlib.Path | None = None, advance: bool = True) -> list[Activ
             seen = {}
         fresh, moved = [], {}
         for name in ENGINES:
-            acted = read_makoto(root)[0] if name == "makoto" else read_journal(name, root)[0]
+            acted = engine_activity(name, root)[0]
             already = seen.get(name)
             already = already if isinstance(already, int) and 0 <= already <= len(acted) else len(acted)
             fresh.extend(acted[already:])
@@ -363,8 +505,27 @@ def self_test() -> int:
 
     passed = failed = 0
 
-    def check(name: str, ok: bool, detail: str = "") -> None:
+    def check(name: str, ok, detail="") -> None:
+        """One cell. `ok` and `detail` may be callables, and then they are evaluated HERE.
+
+        PER-CELL ISOLATION, and it is not decorative. A cell that indexes a structure a planted
+        defect leaves empty used to raise, and the raise took the whole self-test down at that
+        line -- so eleven later cells, including the four that bind the README's own promise,
+        never ran at all and their silence read as "not failing". A plant is supposed to redden
+        cells, not delete them. One cell's error must never suppress another cell's verdict, so
+        an exception is that cell's FAIL and nothing else's.
+        """
         nonlocal passed, failed
+        if callable(ok):
+            try:
+                ok = ok()
+            except Exception as exc:  # noqa: BLE001 -- the cell's own failure, isolated to it
+                ok, detail = False, f"cell raised: {exc!r}"
+        if callable(detail):
+            try:
+                detail = detail()
+            except Exception as exc:  # noqa: BLE001
+                detail = f"detail raised: {exc!r}"
         if ok:
             passed += 1
             print(f"PASS {name}")
@@ -470,6 +631,110 @@ def self_test() -> int:
         check("and an absent audit log is silence, not blindness -- the only-fires policy",
               read_makoto(root) == ([], True, None) or read_makoto(root)[1])
 
+        # ------------------------------------------------------------------------------------
+        # KEEL'S POSITIVE HALF. Every cell below plants rows in the exact shape
+        # `keel/ledger.py` appends: kind demand/discharge, scoped by (session, agent), keyed by
+        # id. If Keel changes that shape these fail, which is the point -- this reader
+        # re-derives a rule Keel owns and cannot import, so the pin is the only thing holding
+        # the two spellings together.
+        def ledger(root: pathlib.Path, *rows: dict) -> None:
+            path = root / "keel_state"
+            path.mkdir(parents=True, exist_ok=True)
+            with (path / LEDGER_FILE).open("w", encoding="utf-8") as handle:
+                for row in rows:
+                    handle.write(json.dumps(row) + "\n")
+
+        def demand(rid, session="s", agent="a", **extra):
+            return {"kind": "demand", "id": rid, "session": session, "agent": agent,
+                    "clause_id": "T02", "subject": "origin/main",
+                    "reason": "a push must be observed landing", **extra}
+
+        def discharge(rid, session="s", agent="a"):
+            return {"kind": "discharge", "id": rid, "session": session, "agent": agent,
+                    "how": "git ls-remote"}
+
+        # NON-VACUITY FIRST, as everywhere else in this file.
+        ledger(root, demand("d1"))
+        acted, counts, note = read_ledger(root)
+        check("a planted demand is read back as an open obligation",
+              len(acted) == 1 and acted[0].kind == "demand" and note is None
+              and counts["demanded"] == 1 and counts["open"] == 1,
+              f"{acted} {counts} note={note}")
+        check("the demand is described in KEEL's words, not this module's",
+              "must be observed landing" in acted[0].subject, acted[0].subject)
+
+        ledger(root, demand("d1"), discharge("d1"), demand("d2"))
+        acted, counts, _ = read_ledger(root)
+        check("PLANT a discharge closes its own demand and only that one",
+              counts == {"demanded": 2, "discharged": 1, "open": 1, "balanced": True}
+              and [a.subject for a in acted] and len(acted) == 1, str(counts))
+
+        # SCOPE. Keel subtracts discharges only within one (session, agent); a discharge from a
+        # different run closing a demand would report an act resolved on another run's evidence.
+        ledger(root, demand("d1", session="s1"), discharge("d1", session="s2"))
+        _, counts, _ = read_ledger(root)
+        check("PLANT a discharge from another SESSION does not close the demand",
+              counts["open"] == 1 and counts["discharged"] == 0, str(counts))
+        ledger(root, demand("d1", agent="a1"), discharge("d1", agent="a2"))
+        _, counts, _ = read_ledger(root)
+        check("PLANT a discharge from another AGENT does not close the demand",
+              counts["open"] == 1 and counts["discharged"] == 0, str(counts))
+
+        # A discharge with no demand licenses nothing and must not make the counts lie.
+        ledger(root, discharge("ghost"))
+        _, counts, _ = read_ledger(root)
+        check("PLANT a discharge with no demand closes nothing and stays balanced",
+              counts == {"demanded": 0, "discharged": 0, "open": 0, "balanced": True}, str(counts))
+
+        # THE CELL THIS WHOLE LANE EXISTS FOR. Before it, this bench read Keel's refusals only,
+        # so an engine that demanded and never denied printed "ran, nothing fired" -- silence
+        # reported as a fact about an engine that had been working.
+        write(root, "keel", dict(session, plugin="keel"))
+        ledger(root, demand("d1"), demand("d2"), discharge("d2"))
+        report = survey(root)
+        state = engine_state(report["engines"]["keel"])
+        check("PLANT keel demanding and never denying is NOT 'ran, nothing fired'",
+              state != "ran, nothing fired" and "1 open" in state, state)
+        check("and the obligation reaches the rendered page in keel's words",
+              "must be observed landing" in render(report), state)
+        keel_refusals = sum(1 for row in report["engines"]["keel"]["acted"]
+                            if row["kind"] in POSITIVE_KINDS)
+        check("demands do NOT inflate `fired`, which still counts refusals only",
+              lambda: keel_refusals == 0 and report["engines"]["keel"]["ledger"]["open"] == 1,
+              lambda: f"refusals={keel_refusals} ledger={report['engines']['keel']['ledger']}")
+
+        # ABSENCE IS SILENCE; UNREADABLE IS A STATED REASON. The ledger is written only when a
+        # demand is raised, so a missing file means nothing was demanded -- the same only-fires
+        # policy audit.jsonl follows. A file that exists and cannot be read is never silence.
+        (root / "keel_state" / LEDGER_FILE).unlink()
+        report = survey(root)
+        check("an absent ledger beside a live keel is silence, not blindness",
+              lambda: report["engines"]["keel"]["observable"]
+              and report["engines"]["keel"]["ledger"]["demanded"] == 0,
+              lambda: str(report["engines"]["keel"]))
+        unreadable = root / "keel_state" / LEDGER_FILE
+        unreadable.mkdir()          # a directory where the journal should be: exists, unreadable
+        report = survey(root)
+        check("PLANT an unreadable ledger is NOT-EVALUABLE, never a clean keel",
+              not report["engines"]["keel"]["observable"]
+              and report["verdict"] == "NOT-EVALUABLE", str(report["engines"]["keel"]["note"]))
+        unreadable.rmdir()
+
+        # ONE OWNER. `survey` and `unseen` must agree about what keel did, or the mode offers an
+        # obligation as fresh after having already shown it.
+        ledger(root, demand("d1"))
+        set_mode(True, root)
+        unseen(root)
+        ledger(root, demand("d1"), demand("d3"))
+        fresh = unseen(root)
+        check("PLANT a new obligation is shown once, by the same reader the page uses",
+              len(fresh) == 1 and fresh[0].kind == "demand", str(fresh))
+        check("and it is not offered again on the next look", unseen(root) == [])
+        set_mode(False, root)
+        (root / "keel_state" / LEDGER_FILE).unlink()
+        import shutil
+        shutil.rmtree(root / "keel_state")
+
         # THE MODE TOGGLES, AND THE TOGGLE IS WHAT THE REPORT READS.
         check("mode is off until switched on", not mode_is_on(root))
         check("PLANT switching the mode on is observable in the report",
@@ -532,6 +797,41 @@ def self_test() -> int:
         set_mode(False, root)
         write(root, "ward", session, deny, dict(deny, ts="T9", reason="Denied (later)"))
         check("PLANT switching off silences it again", drive(root) == {})
+
+    # ------------------------------------------------------------------------------------
+    # THE README'S CLAIM, BOUND TO A CHECK THAT CAN FAIL. `README.md` publishes "every time a
+    # judge actually fires, you see it." That sentence was true of Ward and Makoto and false of
+    # Keel for as long as this module read one of Keel's two records, and nothing anywhere would
+    # have gone red about it. The declaration below is the list of records this bench claims to
+    # read; each one gets a planted positive and must reach the rendered page. Teaching an engine
+    # a new record without teaching this reader now means editing this list, in the open.
+    READ_RECORDS = {
+        ("ward", "decisions.jsonl"): "cert verification disabled",
+        ("keel", "decisions.jsonl"): "cert verification disabled",
+        ("keel", "obligations.jsonl"): "must be observed landing",
+        ("makoto", "audit.jsonl"): "exit-code masking",
+    }
+    with tempfile.TemporaryDirectory(prefix="courthouse-claim-") as name:
+        for (engine, record), expected in READ_RECORDS.items():
+            root = pathlib.Path(name) / f"{engine}-{record}"
+            state = root / f"{engine}_state"
+            state.mkdir(parents=True, exist_ok=True)
+            if record == "decisions.jsonl":
+                rows = [dict(session, plugin=engine), dict(deny, plugin=engine)]
+            elif record == "obligations.jsonl":
+                rows = [{"kind": "demand", "id": "d1", "session": "s", "agent": "a",
+                         "clause_id": "T02", "subject": "origin/main",
+                         "reason": "a push must be observed landing"}]
+                (state / "decisions.jsonl").write_text(
+                    json.dumps(dict(session, plugin=engine)) + "\n", encoding="utf-8")
+            else:
+                rows = [{"ts": "T1", "session_id": "s", "tool_name": "Bash", "exit_code": 2,
+                         "pattern_fires": ["content.verifier_exit_masking"],
+                         "findings": [{"message": "verifier exit-code masking (|| true)"}]}]
+            (state / record).write_text(
+                "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+            check(f"a fire in {engine}/{record} reaches the page the README promises",
+                  expected in render(survey(root)), render(survey(root)))
 
     print(f"DENOMINATOR subject=courthouse-demo-selftest checks={passed + failed} "
           f"passed={passed} failed={failed}")
