@@ -70,6 +70,55 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(0, status)
         self.assertIn("RESIDUE\tX-1", stdout.getvalue())
 
+    def test_a_plant_that_never_fired_is_not_counted_as_coverage(self):
+        """The summary's `covered` must fall when a plant stops being observed.
+
+        Before this cell, `covered` was `len(results)` -- the plants RUN, not the plants
+        SEEN FIRING. A run in which 15 of 19 plants were never observed still printed
+        `covered=19`, the same figure as the fully green run, on the same line as
+        `Validation failed`. A coverage number that cannot move when coverage is lost is
+        the defect this whole file exists to detect, reproduced in its own summary.
+        """
+        observed = calibrate.PlantResult(
+            mock.Mock(id="seen", polarity=calibrate.POLARITY_FIRES, expected_finding="UNANCHORED",
+                      expected_surface=None),
+            calibrate.Outcome.PASS, True, True, "ok")
+        unobserved = calibrate.PlantResult(
+            mock.Mock(id="unseen", polarity=calibrate.POLARITY_FIRES, expected_finding="UNANCHORED",
+                      expected_surface=None),
+            calibrate.Outcome.FAIL, False, True, "declared observation absent")
+
+        def summary_for(results):
+            with mock.patch.object(calibrate, "run_battery",
+                                   return_value=(0 if all(r.outcome is calibrate.Outcome.PASS
+                                                          for r in results) else 1, results)):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    calibrate.main()
+            return [line for line in stdout.getvalue().splitlines()
+                    if line.startswith("SUMMARY")][0]
+
+        residue = len(calibrate.RESIDUE)
+        both_seen = summary_for([observed, observed])
+        one_lost = summary_for([observed, unobserved])
+
+        # Non-vacuity first: the green line must actually carry the full count, or the
+        # comparison below would pass over a summary that reports nothing at all.
+        self.assertIn("covered=2", both_seen)
+        self.assertIn("unobserved=0", both_seen)
+        self.assertIn(f"uncovered={residue}", both_seen)
+
+        self.assertIn("covered=1", one_lost)
+        self.assertIn("unobserved=1", one_lost)
+        self.assertIn(f"uncovered={residue + 1}", one_lost)
+        self.assertNotEqual(both_seen, one_lost,
+                            "the summary did not move when a plant stopped firing")
+
+        # `plants` is the denominator of what RAN and must stay put -- losing coverage must
+        # not also shrink the population it is measured against, or the ratio lies twice.
+        self.assertIn("plants=2", both_seen)
+        self.assertIn("plants=2", one_lost)
+
 
 if __name__ == "__main__":
     unittest.main()

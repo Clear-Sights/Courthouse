@@ -289,11 +289,20 @@ def main() -> int:
     for residue in RESIDUE:
         print("\t".join(map(_field, ("RESIDUE", residue.id, "-", "-", "-", "-", "-",
                                       "UNCOVERED", f"{residue.join}: {residue.reason}"))))
-    covered = len(results)
-    uncovered = len(RESIDUE)
+    # `covered` counts plants whose declared behavior was OBSERVED, never plants merely RUN.
+    # Those are different numbers the moment a plant stops firing, and the run that proved it
+    # printed `covered=19` beside `Validation failed` with 15 of the 19 never observed at all --
+    # a coverage figure contradicting the verdict on its own line. A plant that did not fire is
+    # not coverage; it is the absence this file exists to detect, so it is counted as uncovered
+    # alongside the residue rather than folded into the total.
+    covered = sum(1 for result in results if result.outcome is Outcome.PASS)
+    unobserved = len(results) - covered
+    uncovered = len(RESIDUE) + unobserved
     print("\t".join(map(_field, ("SUMMARY", "-", "-", "-", "-", "-", "-",
                                   VERDICTS[status],
-                                  f"covered={covered} uncovered={uncovered} plants={covered}"))))
+                                  f"covered={covered} uncovered={uncovered} "
+                                  f"unobserved={unobserved} residue={len(RESIDUE)} "
+                                  f"plants={len(results)}"))))
     return status
 
 
