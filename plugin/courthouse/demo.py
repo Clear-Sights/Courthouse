@@ -120,13 +120,38 @@ def _journal_rows(path: pathlib.Path) -> tuple[list[dict], str | None]:
 
 def _describe(row: dict) -> str:
     """The one line a viewer reads. Prefer the engine's own words over anything invented here."""
+    if row.get("kind") == "fault":
+        # A fault row says WHERE it fell and WHICH WAY (`stage`, `failed_closed`); dropping both
+        # rendered a fail-CLOSED refusal and a fail-OPEN abstention as the same line (CH-03).
+        direction = row.get("failed_closed")
+        fell = ("closed" if direction is True else "open" if direction is False
+                else "direction UNSTATED")
+        detail = " ".join(str(row.get("detail") or row.get("reason") or "").split())
+        return f"fault at {row.get('stage', '?')}, failed {fell}: {detail}"
     for key in ("reason", "detail", "message"):
         value = row.get(key)
         if isinstance(value, str) and value.strip():
             return " ".join(value.split())
     if row.get("kind") == "block":
-        return f"stop blocked: {row.get('unreconciled', '?')} unreconciled"
+        # Keel's block row carries `open_count` and `clause_ids`; `unreconciled` was never a
+        # key any engine wrote, so every block line printed `?` (CH-02).
+        ids = row.get("clause_ids")
+        named = f" [{', '.join(str(i) for i in ids)}]" if isinstance(ids, list) and ids else ""
+        return f"stop blocked: {row.get('open_count', '?')} unreconciled{named}"
     return row.get("check_id") or row.get("clause") or row.get("kind", "")
+
+
+def contract_drift(plugin: str, root: pathlib.Path) -> list[str]:
+    """Fault rows that broke the audited contract: every fault row carries `failed_closed`
+    (docs/FAIL-DIRECTION.md, "a plugin that drifts from its row leaves the evidence itself").
+    This is what a bench FAIL means -- a readable record that contradicts the policy it is
+    audited against -- and it was unreachable before: `failed` was a hardcoded 0 (CH-05)."""
+    log = "dispatch_errors.jsonl" if plugin == "makoto" else "decisions.jsonl"
+    rows, unreadable = _journal_rows(root / f"{plugin}_state" / log)
+    if unreadable:
+        return []
+    return [f"{plugin}: fault row at {row.get('stage', '?')} states no fail direction"
+            for row in rows if row.get("kind") == "fault" and not isinstance(row.get("failed_closed"), bool)]
 
 
 def read_journal(plugin: str, root: pathlib.Path) -> tuple[list[Activity], bool, str | None]:
@@ -362,7 +387,7 @@ def survey(root: pathlib.Path | None = None) -> dict:
     it is never folded into the quiet majority.
     """
     root = root or state_root()
-    engines, findings, not_evaluable = {}, [], 0
+    engines, findings, not_evaluable, failed = {}, [], 0, 0
     for name in ENGINES:
         acted, live, note, ledger = engine_activity(name, root)
         # An engine is observable when its record could be read AND that record carries verdicts.
@@ -372,15 +397,20 @@ def survey(root: pathlib.Path | None = None) -> dict:
         # lines. Whatever the render calls unobservable is what this counts.
         blind = bool(note)
         not_evaluable += blind
+        drift = [] if blind else contract_drift(name, root)
+        failed += bool(drift)
         engines[name] = {
             "live": live,
             "acted": [dataclasses.asdict(a) for a in acted],
             "observable": not blind,
             "note": note,
             "ledger": ledger,
+            "contract_drift": drift,
         }
         if blind:
             findings.append({"kind": "unobservable", "subject": name, "detail": note})
+        for line in drift:
+            findings.append({"kind": "contract-drift", "subject": name, "detail": line})
     # `fired` KEEPS ITS MEANING: refusals only. An open obligation and a discharged one are
     # different states, and a demand is not a denial -- folding them into one total would make a
     # single number move for two causes needing opposite responses, so the lane is reported
@@ -391,10 +421,10 @@ def survey(root: pathlib.Path | None = None) -> dict:
     )
     return {
         "tool": "courthouse-demo", "subject": str(root),
-        "verdict": "NOT-EVALUABLE" if not_evaluable else "PASS",
+        "verdict": "FAIL" if failed else "NOT-EVALUABLE" if not_evaluable else "PASS",
         "evaluated": len(ENGINES),
-        "passed": len(ENGINES) - not_evaluable,
-        "failed": 0,
+        "passed": len(ENGINES) - not_evaluable - failed,
+        "failed": failed,
         "not_evaluable": not_evaluable,
         "findings": findings,
         "engines": engines,
@@ -702,6 +732,43 @@ def self_test() -> int:
         check("demands do NOT inflate `fired`, which still counts refusals only",
               lambda: keel_refusals == 0 and report["engines"]["keel"]["ledger"]["open"] == 1,
               lambda: f"refusals={keel_refusals} ledger={report['engines']['keel']['ledger']}")
+
+        # THE ENGINE'S OWN KEYS, NOT INVENTED ONES. Keel's block row carries `open_count` and
+        # `clause_ids`; this read `unreconciled`, a key no engine ever wrote, so every block
+        # line said `?` (CH-02). A fault row carries `stage` and `failed_closed`; both were
+        # dropped, so a fail-CLOSED refusal rendered like a fail-OPEN abstention (CH-03).
+        write(root, "keel", dict(session, plugin="keel"),
+              dict(session, plugin="keel", kind="block", open_count=3, clause_ids=["U20", "U06", "U24"]),
+              dict(session, plugin="keel", kind="fault", stage="broken_commitment",
+                   detail="committed guard for [U20] paid nothing", failed_closed=True),
+              dict(session, plugin="keel", kind="fault", stage="unreadable_event",
+                   detail="JSONDecodeError", failed_closed=False))
+        lines = [a.subject for a in read_journal("keel", root)[0]]
+        check("PLANT a block row renders its count and clause ids from the engine's own keys",
+              any("3 unreconciled [U20, U06, U24]" in s for s in lines), str(lines))
+        check("PLANT a fault row renders its stage and its fail direction",
+              any("fault at broken_commitment, failed closed" in s for s in lines)
+              and any("fault at unreadable_event, failed open" in s for s in lines), str(lines))
+        check("and no rendered line invents a key the engine never wrote",
+              not any("?" in s for s in lines), str(lines))
+
+        # FAIL IS REACHABLE, AND MEANS ONE THING: a readable record that breaks the audited
+        # contract (every fault row states its fail direction, docs/FAIL-DIRECTION.md). Before
+        # this, `failed` was a hardcoded 0 and exit 1 could not happen on any bench (CH-05).
+        report = survey(root)
+        check("a bench whose fault rows all state their direction is not a FAIL",
+              report["verdict"] != "FAIL" and report["failed"] == 0, report["verdict"])
+        write(root, "keel", dict(session, plugin="keel"),
+              dict(session, plugin="keel", kind="fault", stage="evaluation", detail="TypeError"))
+        report = survey(root)
+        check("PLANT a fault row with no fail direction is a bench FAIL, exit 1",
+              report["verdict"] == "FAIL" and report["failed"] == 1
+              and VERDICT_EXIT[report["verdict"]] == 1
+              and any(f["kind"] == "contract-drift" for f in report["findings"]),
+              f"{report['verdict']} failed={report['failed']}")
+        check("and the envelope still conserves: evaluated = passed + failed + not_evaluable",
+              report["evaluated"] == report["passed"] + report["failed"] + report["not_evaluable"],
+              str({k: report[k] for k in ("evaluated", "passed", "failed", "not_evaluable")}))
 
         # ABSENCE IS SILENCE; UNREADABLE IS A STATED REASON. The ledger is written only when a
         # demand is raised, so a missing file means nothing was demanded -- the same only-fires
