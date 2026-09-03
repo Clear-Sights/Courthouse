@@ -55,8 +55,8 @@
         "source": "git-subdir",
         "url": "https://github.com/Clear-Sights/Makoto.git",
         "path": "plugin",
-        "ref": "v2.4.0",
-        "sha": "a313a34544428de6bf04fbee48935add1396f591"
+        "ref": "v2.5.0",
+        "sha": "4f75e7ca7857e159951048e0fc5991a4045cb1ce"
       },
       "description": "Judges the statement: holds Claude Code to its word \u2014 every claim checked against the agent's own logged record; faked checks blocked, not warned (four narrow advisory self-checks excepted). Two-tier catalog (15 pre-checks, 19 Stop gates); blocking checks certified at zero false positives on the shipped corpus and gold negative sets \u2014 per-gate certification basis in the Makoto README.",
       "category": "workflow",
@@ -68,7 +68,7 @@
       ],
       "license": "Apache-2.0",
       "homepage": "https://github.com/Clear-Sights/Makoto",
-      "version": "2.4.0"
+      "version": "2.5.0"
     },
     {
       "name": "courthouse-demo",
