@@ -35,9 +35,9 @@
         "url": "https://github.com/Clear-Sights/Keel.git",
         "path": "plugin",
         "ref": "main",
-        "sha": "e06e88847fccd57874ade29de486963ab26f308d"
+        "sha": "0b7730596d1b277a9b18e99c4913a219ad7053ba"
       },
-      "description": "Judges the sequence: denies a costly call until the cheap call that licenses it is on record, and names the construction that retires the guard for good. One obligation ledger reconciled at Stop; exact predicates over event plus ledger, never over prose. Fixes: walk_tree honours the ignore files of the repositories it walks (Courthouse #34); a creation is not an unread rewrite (Courthouse #36); C08-check-can-fail's checker-key extraction no longer keys an obligation on a shell keyword or output filter (Courthouse #40).",
+      "description": "Judges the sequence: denies a costly call until the cheap call that licenses it is on record, and names the construction that retires the guard for good. One obligation ledger reconciled at Stop; exact predicates over event plus ledger, never over prose. Fixes: walk_tree honours ignore files (#34); a creation is not an unread rewrite (#36); C08 keys on the checker, not a shell word (#40); A03 no longer fails closed forever in a non-git cwd; keel-guard works on a session's first denial and is case-insensitive; PowerShell gated like Bash (Keel #42).",
       "category": "workflow",
       "tags": [
         "security",
