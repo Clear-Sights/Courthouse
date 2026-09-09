@@ -34,10 +34,10 @@
         "source": "git-subdir",
         "url": "https://github.com/Clear-Sights/Keel.git",
         "path": "plugin",
-        "ref": "v2.1.0",
-        "sha": "5bd4f6a72eb78efa8b4e4779946be554ab0bacf3"
+        "ref": "claude/handoff-continuation-fu9vp9",
+        "sha": "15e95c1e21375992f562a06121f1a9ef500b36e5"
       },
-      "description": "Judges the sequence: denies a costly call until the cheap call that licenses it is on record, and names the construction that retires the guard for good. One obligation ledger reconciled at Stop; exact predicates over event plus ledger, never over prose.",
+      "description": "Judges the sequence: denies a costly call until the cheap call that licenses it is on record, and names the construction that retires the guard for good. One obligation ledger reconciled at Stop; exact predicates over event plus ledger, never over prose. Fixes: walk_tree honours the ignore files of the repositories it walks (Courthouse #34); a creation is not an unread rewrite (Courthouse #36).",
       "category": "workflow",
       "tags": [
         "security",
@@ -47,7 +47,7 @@
       ],
       "license": "Apache-2.0",
       "homepage": "https://github.com/Clear-Sights/Keel",
-      "version": "2.1.0"
+      "version": "2.1.1"
     },
     {
       "name": "makoto",
